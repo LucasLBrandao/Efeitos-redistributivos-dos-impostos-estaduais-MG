@@ -5,8 +5,6 @@ date: "8/12/2021"
 output:
   html_document: default
   pdf_document: default
-knit: (function(inputFile, encoding) {
-  rmarkdown::render(inputFile, encoding = encoding, output_dir = "./outputs/") })
 ---
 
 ```{r setup, include=FALSE}
@@ -360,9 +358,10 @@ rm(carac_familias,familia_icms_impostos,tradutor_icms)
 ## 0. criação do survey_design
 
 ```{r}
+
 library(survey)
 
-pos_estrato <- read.csv("/Dados/Pos_estratos_totais.csv")
+pos_estrato <- read.csv("./Dados/Pos_estratos_totais.csv")
 pof_df <- left_join(familias_impostos,
                     pos_estrato, by = c("UPA"="COD_UPA.UF.SEQ.DV."))
 pre_stratified_design <- 
@@ -588,6 +587,6 @@ con_index_icms <- ci(pof_design_moradores$variables$gasto_icms, pof_design_morad
 
 lerYi_icms <- con_index_icms$concentration_index - gini_pos_icms[1]
 
-
+print(lerYi_icms)
 ```
 
