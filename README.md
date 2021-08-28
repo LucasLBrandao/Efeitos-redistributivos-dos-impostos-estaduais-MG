@@ -1,2 +1,2 @@
 # Efeitos redistributivos dos impostos estaduais MG
- Repositório contendo as análises feitas no meu Trabalho de Conclusão de curso
+ Repositório contendo as análises feitas na minha monografia para conclusão do curso de Administração pública da fundação joão pinheiro
