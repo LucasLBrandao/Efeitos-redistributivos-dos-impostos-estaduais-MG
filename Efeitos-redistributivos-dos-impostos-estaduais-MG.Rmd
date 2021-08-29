@@ -8,7 +8,7 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,warning = F, result = F,message = F)
 
 library(readxl)
 library(tidyverse)
@@ -47,6 +47,8 @@ Temos então 3 opções para classificar as famílias:
 1 - Renda total anual por UC
 2 - Renda disponível anual por UC
 3 - Renda total anual por uc - deduções anual por uc
+
+No código abaixo então, calculo os 3 tipos de renda tanto anual quanto mensal per capita
 
 ```{r}
 morador <- readRDS("./Dados/Leitura Microdados POF/MORADOR.rds")
@@ -122,9 +124,9 @@ despesa_coletiva <- readRDS("./Dados/Leitura Microdados POF/DESPESA_COLETIVA.rds
 despesa_individual <- readRDS("./Dados/Leitura Microdados POF/DESPESA_INDIVIDUAL.rds")
 ```
 
-Em seguida trato os 3 microdados, excluindo as formas de Aquisição - que identificam a forma pela qual o tipo de produto ou serviço foi adquirido pela unidade de consumo no período de referência da pesquisa - referentes à Doação, Retirada do Negócio, Produção própria e Outra. 
+Em seguida trato os 3 microdados, excluindo as formas de aquisição - que identificam a forma pela qual o tipo de produto ou serviço foi adquirido pela unidade de consumo no período de referência da pesquisa - referentes à Doação, Retirada do Negócio, Produção própria e Outra. 
 
-Crio então uma nova dimensão para servir como identificador da Unidade de Consumo, concatentando o Código da Unidade Primário de Amostragem, o Número do Domícilio e o Número da Unidade de Consumo (Variávei UPA, NUM_DOM e NUM_UC nos 3 microdados)
+Crio então uma nova dimensão para servir como identificador da Unidade de Consumo, concatentando o Código da Unidade Primário de Amostragem, o Número do Domícilio e o Número da Unidade de Consumo (Variáveis UPA, NUM_DOM e NUM_UC nos 3 microdados)
 
 Em seguida anualizo os gastos a partir da multiplicação do fator de anualização pelo valor da despesa deflacionado e pelo Número de meses que a despesa/aquisição foi realizada pela unidade, nos casos cabíveis.
 
@@ -164,12 +166,10 @@ rm(prod_UC_caderneta_coletiva,prod_UC_despesa_coletiva,prod_UC_despesa_individua
 
 ### Cálculo da taxa efetiva do ICMS para cada produto da TRU (Problemático)
 
-
-
-Para cálculo da taxa efetiva seguiremos a metodologia feita por afonso et al. (2004).
+Para cálculo da taxa efetiva seguiremos a metodologia feita por Afonso et al. (2004).
 Afonso parte do pressuposto de que os insumos dos produtos não são tributados, pelo icms se tratar de um Imposto sobre valor adicionado. assim a base de cálculo seriam os componentes da demanda final. para confirmar tal pressuposto é importante verificar na Matriz Insumo produto se a parcela do imposto recolhido pelas atividades selecionadas que incidiu sobre o conusmo intermediário (aquisição de insumos). É importante verificar também quais os principais componentes da demanda final das atividades selecionadas, em que no nosso caso, o ideal é que seja o consumo das famílias.
 
-Para realiar tal análise primeiramente importamos e tratamos os dados da tabela de recursos e usos de 2018 referentes à Oferta de bens e serviços à valores correntes. Em seguida importamos e tratamos os dados da tabela de recursos e uso de 2018 referentes à demanda final.
+Para realizar tal análise primeiramente importamos e tratamos os dados da tabela de recursos e usos de 2018 referentes à Oferta de bens e serviços à valores correntes. Em seguida importamos e tratamos os dados da tabela de recursos e uso de 2018 referentes à demanda final.
 
 ```{r}
 tru_icms <-  read_xls("./Dados/tabelas_de_recursos_e_usos/68_tab1_2018 - arrecadado em icms.xls", skip = 3)
@@ -224,7 +224,7 @@ tradutor <- tradutor %>% mutate(`Produto POF` = as.numeric(`Produto POF`))
 
 ```
 
-Feito o tratamento, apenas realizei a junção entre a tabela do tradutor e a tabela que contruí anteriormente, a partir do código do produto na TRU.
+Feito o tratamento, apenas realizei a junção entre a tabela do tradutor e a tabela que construí anteriormente, a partir do código do produto na TRU.
 
 ```{r}
 
@@ -235,7 +235,7 @@ tradutor_icms <- tradutor %>%
 rm(tradutor,tru_consumo_icms)
 ```
 
-Como resultado dessa etapa eu tenho uma tabela que contem os códigos dos produtos da POF e o ICMS efetivo de cada um deles, a partir da conexão com o código dos produtos presentes nas tabelas de recursos e usos. Posso então proceder com a aplicação dessas alíquotas nas despesas das famílias que calculei anteriormente.
+Como resultado dessa etapa obtenho uma tabela que contem os códigos dos produtos da POF e o ICMS efetivo de cada um deles, a partir da conexão com o código dos produtos presentes nas tabelas de recursos e usos. Posso então proceder com a aplicação dessas alíquotas nas despesas das famílias que calculei anteriormente.
 
 #### Conferência quanto à a representatividade do consumo das famílias na despesa total
 
@@ -257,6 +257,7 @@ rm(prods_despesas_familia,demanda_prod_pof,unique_demanda_prod_pof)
 
 
 ### Cálculo da taxa nominal do ICMS para cada produto
+
 Para adotar essa estratégia é necessário primeiramente levantar as taxas nominais de cada tipo de produto no RICMS de Minas Gerais. O desafio relacionado à esse levantamento é que o RICMS não conta com uma padronização da classificação dos produtos, em que por vezes utiliza-se de denominação genéricas como "Arroz, feijão, farinha, combustível para aviões" e outras vezes fornece o NCM - Nomenclatura Comum do Mercosul. Dessa forma, utilizei do Sistema ELetrônico do Serviço de Informação ao cidadão para solicitar a relação de produtos e alíquotas de maneira melhor estruturada. o protocolo é 01190.000157/2021-41 . e no momento aguardo retorno
 
 ### Cálculo do gasto com imposto em cada despesa
@@ -309,7 +310,7 @@ rm(prod_uc_despesas)
 
 ### Cálculo do total gasto no ano com ICMS por família
 
-O próximo passo então consistiu em agrupar a base construída anteriormente por família e calcular o total gasto com os produtos e o total gasto com ICMS
+O próximo passo então consistiu em agrupar a base construída anteriormente por famílias e calcular o total gasto com os produtos e o total gasto com ICMS
 
 ```{r}
 
@@ -325,7 +326,7 @@ rm(prod_uc_despesas_icms)
 
 ## Junção do gasto com icms e ipva
 
-Em seguida foi realizada junção entre a base com os gastos com ICMS de cada família e base com os gastos com veículos de cada família, a partir do código da unidade de consumo. Em seguida foi criada a variável `gasto_imposts` que refere-se a soma do gasto com ICMS e do gasto com veículos, ambos anuais.
+Em seguida foi realizada junção entre a base com os gastos com ICMS de cada família e base com os gastos com veículos de cada família, a partir do código da unidade de consumo. Em seguida foi criada a variável `gasto_impostos` que refere-se a soma do gasto com ICMS e do gasto com veículos, ambos anuais.
 
 ```{r}
 familia_icms_impostos <- familia_icms %>% 
@@ -338,7 +339,7 @@ rm(familia_icms,gasto_veiculos)
 
 ## 4. Criação de coluna com renda após gasto com IPVA e ICMS
 
-Em seguida, foi realizada junção da base que contem as características de cada família. calculou-se então a Renda após dedução do IPVA (variável `renda_pos_ipva`), a partir da subtração do gasto com veículos anualizado da Renda total anual. Seguiu-se a mesma lógica para o cálculo da renda após dedução dos gastos com ICMS, mas ao invés de utilizarmos a Renda total anual como base para subtração, utilizou-se a Renda após a dedução do IPVA.
+Em seguida, foi realizada a junção da base que contém as características de cada família. calculou-se então a Renda após dedução do IPVA (variável `renda_pos_ipva`), a partir da subtração do gasto com veículos anualizado da Renda total anual. Seguiu-se a mesma lógica para o cálculo da renda após dedução dos gastos com ICMS, mas ao invés de utilizarmos a Renda total anual como base para subtração, utilizou-se a Renda após a dedução do IPVA.
 
 ```{r}
 
@@ -355,7 +356,9 @@ rm(carac_familias,familia_icms_impostos,tradutor_icms)
 
 # Verificação dos efeitos distributivos
 
-## 0. criação do survey_design
+## 1. criação do survey_design
+
+Para verificar os efeitos distributivos é necessário que consideremos o design da amostra. Para isso o R dispõe dos pacotes `survey` e `srvyr`. Para a construção do design segui as orientações presentes no seguinte trabalho http://asdfree.com/pesquisa-de-orcamentos-familiares-pof.html
 
 ```{r}
 
@@ -391,9 +394,9 @@ rm(pre_stratified_design,pos_estrato,pof_df,population_totals,familias_impostos)
 ```
 
 
-## 1. Divisão das famílias em classes de renda
+## 2. Divisão das famílias em classes de renda
 
-O primeiro passo para verificação dos efeitos distributivos é a divisão das famílias em classes de renda, de modo que possamos comparar os efeitos da tributação a diferentes niveis de renda. Para realizar a divisão utilizamos o regra de sturges, uma metodologia para definir o número de intervalos e classes necessários para se dividir uma amostra com base em uma variável.
+O primeiro passo para verificação dos efeitos distributivos é a divisão das famílias em classes de renda, de modo que possamos comparar os efeitos da tributação a diferentes niveis de renda. Para realizar a divisão utilizamos a mesma divisão utilizada por Afonso et al. (2004), em que as famílias são divididas em 10 classes, referentes à quantos salários mínimos per capita recebem por mês
 
 
 ```{r}
@@ -428,7 +431,7 @@ rm(familias_classes_renda_design,pof_design,k)
 
 Um primeiro modo de estimar os efeitos distributivos nas diferentes classes de renda criadas anteriormente é calcular a renda total anual média de cada classe, a renda pós dedução do ipva média de cada classe e a renda pós dedução do icms em cada classe. Feito isso, compara-se a participação de cada classe na soma das rendas médias. Caso observemos uma redução da participação das classes mais baixas e um aumento nas classes com maior nível de renda após aplicação e/ou após aplicação do ICMS, pode haver indícios de regressividade nesses impostos.
 
-```{r}
+```{r, results='markup'}
 
 tabela_media_part <- pof_impostos_srvyr_design %>% 
   group_by(classes_renda) %>% 
@@ -449,7 +452,21 @@ tabela_media_part <- pof_impostos_srvyr_design %>%
          perd_gan_pos_ipva = percent(perd_gan_pos_ipva),
          perd_gan_pos_icms = percent(perd_gan_pos_icms))
 
-kable(tabela_media_part, digits = 2)
+tabela_media_part <-  tabela_media_part %>% select(-c(quantidade,quantidade_se,
+                                                    renda_total_media_se,
+                                                    renda_pos_ipva_media_se,
+                                                    renda_pos_icms_media_se,
+                                                    ))
+
+kable(tabela_media_part, digits = 2,col.names = c("Classe",
+                                                  "Renda Total média",
+                                                  "Renda pós IPVA média",
+                                                  "Renda pós ICMS média",
+                                                  "% da Renda média",
+                                                  "% da Renda pós IPVA",
+                                                  "% da Renda pós ICMS",
+                                                  "Variação pós IPVA",
+                                                  "Variação pós ICMS"))
 rm(tabela_media_part)
 
 ```
@@ -458,7 +475,7 @@ rm(tabela_media_part)
 ### 4. Estimação da renda total média de cada classe e da despesa total média
 Um outro meio de comparar os diferentes efeitos dos impostos nos diferentes níveis de renda é calcular  além da renda total média,a despesa média com ICMS,IPVA e com os dois impostos em cada classe. a partir da despesa média com cada imposto e com ambos é possível calcularmos a razão entre esses valores e a renda total média de cada classe, permitindo que comparemos o peso que cada imposto tem em média nos diferentes níveis.
 
-```{r}
+```{r, results='markup'}
 
 tabela_media <- pof_impostos_srvyr_design %>% 
   group_by(classes_renda) %>% 
@@ -470,7 +487,19 @@ tabela_media <- pof_impostos_srvyr_design %>%
          gastoemicms = scales::percent(despesa_icms_media/renda_total_media),
          gastoemimpostos = scales::percent(despesa_total_media/renda_total_media))
 
-kable(tabela_media, digits = 2)
+tabela_media <- tabela_media %>% select(-c(renda_total_media_se,
+                                           despesa_ipva_media_se,
+                                           despesa_icms_media_se,
+                                           despesa_total_media_se))
+
+kable(tabela_media, digits = 2,col.names =c("Classe",
+                                            "Renda Total média",
+                                            "Gasto com IPVA médio",
+                                            "Gasto com ICMS médio",
+                                            "Gasto com Impostos estaduais médio",
+                                            "% da renda gasta com IPVA",
+                                            "% da renda gasta com ICMS",
+                                            "% da renda gasta com impostos estaduais"))
 rm(tabela_media)
 
 ```
@@ -480,7 +509,7 @@ rm(tabela_media)
 
 A partir dos dados também possível compararmos a participação de cada classe no montante total de renda antes da aplicação dos impostos e após serem feitas as deduções;
 
-```{r}
+```{r, results='markup'}
 
 tabela_participacao_pos <- pof_impostos_srvyr_design %>% 
   group_by(classes_renda) %>% 
@@ -492,7 +521,17 @@ tabela_participacao_pos <- pof_impostos_srvyr_design %>%
          part_pos_ipva = percent(renda_pos_ipva_total/sum(renda_pos_ipva_total)),
          part_pos_icms = percent(renda_pos_icms_total/sum(renda_pos_icms_total)))
 
-kable(tabela_participacao_pos,digits = 2)
+tabela_participacao_pos <- tabela_participacao_pos %>% select(-c(renda_total_se,
+                                                                 renda_pos_ipva_total_se,
+                                                                 renda_pos_icms_total_se))
+
+kable(tabela_participacao_pos,digits = 2,col.names = c("Classe",
+                                                       "Renda total",
+                                                       "Renda total pós IPVA",
+                                                       "Renda total pós ICMS",
+                                                       "% da Renda total",
+                                                       "% da Renda total pós IPVA",
+                                                       "% da Renda total pós ICMS"))
 
 rm(tabela_participacao_pos)
 ```
@@ -502,8 +541,9 @@ rm(tabela_participacao_pos)
 
 Finalmente, a partir das classes criadas podemos comparar a participação de cada uma na renda total e na arrecadação de cada imposto individualmente e de cada um dos impostos aqui explorados.
 
-```{r}
-tabela_participacao <- pof_impostos_srvyr_design %>% group_by(classes_renda) %>% 
+```{r, results='markup'}
+tabela_participacao <- pof_impostos_srvyr_design %>% 
+  group_by(classes_renda) %>% 
   summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
             despesa_ipva_total = survey_total(gasto_veiculos_anualizado,na.rm= T),
             despesa_icms_total = survey_total(gasto_icms,na.rm = T),
@@ -514,12 +554,29 @@ tabela_participacao <- pof_impostos_srvyr_design %>% group_by(classes_renda) %>%
          part_icms = percent(despesa_icms_total/sum(despesa_icms_total)),
          part_impostos = percent(despesa_total/sum(despesa_total)))
 
-kable(tabela_participacao,digits = 2)
+tabela_participacao <- tabela_participacao %>% select(-c(renda_total_se,
+                                                         despesa_ipva_total_se,
+                                                         despesa_icms_total_se,
+                                                         despesa_total_se))
+
+kable(tabela_participacao,digits = 2,col.names = c("Classe",
+                                                   "Renda total",
+                                                   "Gasto total com IPVA",
+                                                   "Gasto total com ICMS",
+                                                   "Gasto total com os impostos",
+                                                   "% da Renda total",
+                                                   "% do Gasto com IPVA",
+                                                   "% do Gasto com ICMS",
+                                                   "% do Gasto com os impostos"))
+
+rm(tabela_participacao)
 ```
 
-## 7. Compara gini nos estágios de renda
+## 7. Comparando o gini nos estágios de renda
 
-tratando a base de moradores
+### Tratando a base de moradores
+
+Aqui são seguidos os mesmo passos de tratamente da base das Famílias utilizada nos passos anteriores, criando uma base que leve em conta o design da amostra para os cálculos.
 
 ```{r}
 
@@ -556,36 +613,40 @@ rm(comparação_gini,pof_impostos_srvyr_design,population_totals,moradores,pre_s
 
 ```
 
-Calculando o gini para diferentes etapas
+### Calculando o gini para diferentes etapas
+
+Procedemos então com o cálculo do gini nas três etapas de renda calculadas anteriormente - A renda total, a renda pós gasto com IPVA e a renda pós gasto com ICMS.
 
 ```{r}
 library(convey)
 
 pof_design_moradores_prep <- convey_prep(pof_design_moradores)
 
-coef( svygini( ~ RENDA_TOTAL_ANUAL, pof_design_moradores_prep ) ) * 100
+gini_renda_total <- coef( svygini( ~ RENDA_TOTAL_ANUAL, pof_design_moradores_prep ) ) * 100
 
-coef( svygini( ~ renda_pos_ipva, pof_design_moradores_prep )) * 100
+gini_pos_ipva <- coef( svygini( ~ renda_pos_ipva, pof_design_moradores_prep )) * 100
 
-gini_pos_icms <- coef( svygini( ~ renda_pos_icms, pof_design_moradores_prep ))
+gini_pos_icms <- coef( svygini( ~ renda_pos_icms, pof_design_moradores_prep )) *100
 
+tabela_gini <- data.frame(etapa_renda = c("Renda Total","Renda pós IPVA","Renda pós ICMS"),
+                          gini = c(gini_renda_total,gini_pos_ipva,gini_pos_icms))
 
-
+kable(tabela_gini, digits = 2,col.names = c("Estágio da Renda",
+                                            "Índice de Gini"))
 ```
-
 
 
 ## 8. Índice de Lerman-Yitzhaki
 
+O cálculo do Índice de progressividade de Lerman e Yitzhaki é feito a partir do Índice de concetração do imposto ordenado a partir da renda final menos o índice de Gini após a aplicação do imposto, ou seja, da Renda pós o imposto em questão
+
 ```{r}
 library(IC2)
 library("rineq")
-calcSConc(pof_design_moradores$variables$gasto_icms, pof_design_moradores$variables$renda_pos_icms, w = pof_design_moradores$variables$peso, param = 0)
-
 
 con_index_icms <- ci(pof_design_moradores$variables$gasto_icms, pof_design_moradores$variables$renda_pos_icms,wt=pof_design_moradores$variables$peso, type = c("CI"))
 
-lerYi_icms <- con_index_icms$concentration_index - gini_pos_icms[1]
+lerYi_icms <- con_index_icms$concentration_index - gini_pos_icms[1]/100
 
 print(lerYi_icms)
 ```
