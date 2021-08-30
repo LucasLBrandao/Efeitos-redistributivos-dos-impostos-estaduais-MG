@@ -1,10 +1,10 @@
 ---
-title: "Cálculo das etapas de renda"
+title: "Efeitos redistributivos dos impostos estaduais"
 author: "Lucas Brandão"
 date: "8/12/2021"
 output:
-  html_document: default
   pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -414,8 +414,20 @@ k <- c(rep(954,11)*c(0,2,3,5,6,8,10,15,20,30,Inf))
 familias_classes_renda_design <- 
   transform(
     pof_design,
-    classes_renda = cut(RENDA_TOTAL_MENSAL_PC,breaks = k,include.lowest = T,ordered_result = T)
-  )
+    classes_renda = cut(RENDA_TOTAL_MENSAL_PC,
+                        breaks = k,
+                        include.lowest = T,
+                        ordered_result = T,
+                        labels = c("Até 2",
+                                   "entre 2 e 3",
+                                   "entre 3 e 5",
+                                   "entre 5 e 6",
+                                   "entre 6 e 8",
+                                   "entre 8 e 10",
+                                   "entre 10 e 15",
+                                   "entre 15 e 20",
+                                   "entre 20 e 30",
+                                   "mais que 30")))
 
 #View(familias_classes_renda_design$variables %>% select(RENDA_TOTAL_MENSAL_PC,classes_renda))
 
@@ -458,15 +470,23 @@ tabela_media_part <-  tabela_media_part %>% select(-c(quantidade,quantidade_se,
                                                     renda_pos_icms_media_se,
                                                     ))
 
-kable(tabela_media_part, digits = 2,col.names = c("Classe",
-                                                  "Renda Total média",
-                                                  "Renda pós IPVA média",
-                                                  "Renda pós ICMS média",
-                                                  "% da Renda média",
-                                                  "% da Renda pós IPVA",
-                                                  "% da Renda pós ICMS",
-                                                  "Variação pós IPVA",
-                                                  "Variação pós ICMS"))
+kable(tabela_media_part, digits = 2,col.names = c("Salários mínimos",
+                                                  "Total",
+                                                  "pós IPVA",
+                                                  "pós ICMS",
+                                                  "Total",
+                                                  "pós IPVA",
+                                                  "pós ICMS",
+                                                  "IPVA",
+                                                  "ICMS"),
+      align = c("lcccccccc"),
+      booktabs = T,
+      caption = "Peso médio dos impostos na Renda",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "Renda média" = 3, "% da Renda" = 3,"Variação pós"=2))
 rm(tabela_media_part)
 
 ```
@@ -492,14 +512,22 @@ tabela_media <- tabela_media %>% select(-c(renda_total_media_se,
                                            despesa_icms_media_se,
                                            despesa_total_media_se))
 
-kable(tabela_media, digits = 2,col.names =c("Classe",
+kable(tabela_media, digits = 2,col.names =c("Salários mínimos",
                                             "Renda Total média",
-                                            "Gasto com IPVA médio",
-                                            "Gasto com ICMS médio",
-                                            "Gasto com Impostos estaduais médio",
-                                            "% da renda gasta com IPVA",
-                                            "% da renda gasta com ICMS",
-                                            "% da renda gasta com impostos estaduais"))
+                                            "IPVA",
+                                            "ICMS",
+                                            "Impostos estaduais",
+                                            "IPVA",
+                                            "ICMS",
+                                            "impostos estaduais"),
+      align = c("lccccccc"),
+      booktabs = T,
+      caption = "Peso médio dos impostos na Renda",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 2, "Gasto médio com" = 3, "% da renda gasta com"=3))
 rm(tabela_media)
 
 ```
@@ -521,17 +549,25 @@ tabela_participacao_pos <- pof_impostos_srvyr_design %>%
          part_pos_ipva = percent(renda_pos_ipva_total/sum(renda_pos_ipva_total)),
          part_pos_icms = percent(renda_pos_icms_total/sum(renda_pos_icms_total)))
 
-tabela_participacao_pos <- tabela_participacao_pos %>% select(-c(renda_total_se,
+tabela_participacao_pos <- tabela_participacao_pos %>% select(-c(renda_total,
+                                                                 renda_pos_ipva_total,
+                                                                 renda_pos_icms_total,
+                                                                 renda_total_se,
                                                                  renda_pos_ipva_total_se,
                                                                  renda_pos_icms_total_se))
 
-kable(tabela_participacao_pos,digits = 2,col.names = c("Classe",
+kable(tabela_participacao_pos,digits = 2,col.names = c("Salários mínimos",
                                                        "Renda total",
                                                        "Renda total pós IPVA",
-                                                       "Renda total pós ICMS",
-                                                       "% da Renda total",
-                                                       "% da Renda total pós IPVA",
-                                                       "% da Renda total pós ICMS"))
+                                                       "Renda total pós ICMS"),
+       align = c("lccc"),
+      booktabs = T,
+      caption = "Participação das classes na renda pós dedução dos impostos",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 3))
 
 rm(tabela_participacao_pos)
 ```
@@ -549,25 +585,35 @@ tabela_participacao <- pof_impostos_srvyr_design %>%
             despesa_icms_total = survey_total(gasto_icms,na.rm = T),
             despesa_total = survey_total(gasto_impostos,na.rm = T)) %>% 
   ungroup() %>% 
-  mutate(part_renda = percent(renda_total/sum(renda_total)),
-         part_ipva = percent(despesa_ipva_total/sum(despesa_ipva_total)),
-         part_icms = percent(despesa_icms_total/sum(despesa_icms_total)),
-         part_impostos = percent(despesa_total/sum(despesa_total)))
+  mutate(part_renda = scales::percent(renda_total/sum(renda_total)),
+         part_ipva = scales::percent(despesa_ipva_total/sum(despesa_ipva_total)),
+         part_icms = scales::percent(despesa_icms_total/sum(despesa_icms_total)),
+         part_impostos = scales::percent(despesa_total/sum(despesa_total)))
 
-tabela_participacao <- tabela_participacao %>% select(-c(renda_total_se,
+tabela_participacao <- tabela_participacao %>% select(-c(renda_total,
+                                                         despesa_ipva_total,
+                                                         despesa_icms_total,
+                                                         despesa_total,
+                                                         renda_total_se,
                                                          despesa_ipva_total_se,
                                                          despesa_icms_total_se,
                                                          despesa_total_se))
 
-kable(tabela_participacao,digits = 2,col.names = c("Classe",
-                                                   "Renda total",
-                                                   "Gasto total com IPVA",
-                                                   "Gasto total com ICMS",
-                                                   "Gasto total com os impostos",
-                                                   "% da Renda total",
-                                                   "% do Gasto com IPVA",
-                                                   "% do Gasto com ICMS",
-                                                   "% do Gasto com os impostos"))
+kbl(tabela_participacao,col.names = c("Salários mínimos",
+                                      "Renda total",
+                                      "Gasto com IPVA",
+                                      "Gasto com ICMS",
+                                      "Gasto com impostos"),
+      align = c("lcccc"),
+      booktabs = T,
+      caption = "Participação das classes no gasto com impostos",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 4))
+
+
 
 rm(tabela_participacao)
 ```
@@ -632,7 +678,8 @@ tabela_gini <- data.frame(etapa_renda = c("Renda Total","Renda pós IPVA","Renda
                           gini = c(gini_renda_total,gini_pos_ipva,gini_pos_icms))
 
 kable(tabela_gini, digits = 2,col.names = c("Estágio da Renda",
-                                            "Índice de Gini"))
+                                            "Índice de Gini"),
+      align = c("cc"))
 ```
 
 
@@ -645,6 +692,8 @@ library(IC2)
 library("rineq")
 
 con_index_icms <- ci(pof_design_moradores$variables$gasto_icms, pof_design_moradores$variables$renda_pos_icms,wt=pof_design_moradores$variables$peso, type = c("CI"))
+
+con_index_ipva <- ci(pof_design_moradores$variables$gasto_ipva, pof_design_moradores$variables$renda_pos_ipva,wt=pof_design_moradores$variables$peso, type = c("CI"))
 
 lerYi_icms <- con_index_icms$concentration_index - gini_pos_icms[1]/100
 
