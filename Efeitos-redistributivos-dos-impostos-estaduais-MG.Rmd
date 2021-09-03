@@ -27,7 +27,7 @@ http://asdfree.com/pesquisa-de-orcamentos-familiares-pof.html
 
 https://guilhermejacob.github.io/context/
 
-## 1. Cálculo da renda por família
+## Cálculo da renda por família
 
 A decisão de qual renda utilizar  exige um entendimento das variáveis disponíveis no microdados da POF. Neles, cada morador conta com uma RENDA_TOTAL. Essa variável aponta para o rendimento bruto total mensal da Unidade de Consumo. Este é obito através do somatório dos rendimento brutos monetários mensais de todos os moradores da Unidade de Consumo. Esses podem ser obtidos através do trabalho, transferência e outras rendas. São somados também os rendimentos não monetário mensais do domicílio, acrescido da variação patrimonial que inclui vendas de imóveis, recebimentos de heranças e o saldo positivo da movimentação financeira - ou seja, traz a disponibilidade bruta de recursos da família.
 
@@ -83,7 +83,7 @@ carac_familias <- morador %>%
 rm(morador)
 ```
 
-## 2. Cálculo do total gasto  anualmente com IPVA por unidade de consumo
+## Cálculo do total gasto  anualmente com IPVA por unidade de consumo
 
 Iniciando com o cálculo mais simples, primeiramente estimamos o gasto anual com IPVA e taxa relacionadas à veículos. A POF dispõe de um quadro voltado apenas para despesas com veículos, que conta com os seguintes tipos de despesa:
 1 - IPVA
@@ -111,7 +111,7 @@ rm(despesa_individual)
 ```
 
 
-## 3. Cálculo do total gasto anulamente com ICMS por unidade de consumo
+## Cálculo do total gasto anualmente com ICMS por unidade de consumo
 
 ### Cálculo do gasto anual de cada família com cada despesa
 
@@ -337,7 +337,7 @@ familia_icms_impostos <- familia_icms %>%
 rm(familia_icms,gasto_veiculos)
 ```
 
-## 4. Criação de coluna com renda após gasto com IPVA e ICMS
+## Criação de coluna com renda após gasto com IPVA e ICMS
 
 Em seguida, foi realizada a junção da base que contém as características de cada família. calculou-se então a Renda após dedução do IPVA (variável `renda_pos_ipva`), a partir da subtração do gasto com veículos anualizado da Renda total anual. Seguiu-se a mesma lógica para o cálculo da renda após dedução dos gastos com ICMS, mas ao invés de utilizarmos a Renda total anual como base para subtração, utilizou-se a Renda após a dedução do IPVA.
 
@@ -356,7 +356,7 @@ rm(carac_familias,familia_icms_impostos,tradutor_icms)
 
 # Verificação dos efeitos distributivos
 
-## 1. criação do survey_design
+## criação do survey_design
 
 Para verificar os efeitos distributivos é necessário que consideremos o design da amostra. Para isso o R dispõe dos pacotes `survey` e `srvyr`. Para a construção do design segui as orientações presentes no seguinte trabalho http://asdfree.com/pesquisa-de-orcamentos-familiares-pof.html
 
@@ -394,7 +394,7 @@ rm(pre_stratified_design,pos_estrato,pof_df,population_totals,familias_impostos)
 ```
 
 
-## 2. Divisão das famílias em classes de renda
+## Divisão das famílias em classes de renda
 
 O primeiro passo para verificação dos efeitos distributivos é a divisão das famílias em classes de renda, de modo que possamos comparar os efeitos da tributação a diferentes niveis de renda. Para realizar a divisão utilizamos a mesma divisão utilizada por Afonso et al. (2004), em que as famílias são divididas em 10 classes, referentes à quantos salários mínimos per capita recebem por mês
 
@@ -408,8 +408,10 @@ pof_design <-
 
 svytotal( ~ one , pof_design )
 
-k <- c(rep(954,11)*c(0,2,3,5,6,8,10,15,20,30,Inf))
-
+#k <- c(rep(954,11)*c(0,2,3,5,6,8,10,15,20,30,Inf))
+k <- round(
+  c(0,svyquantile(~RENDA_TOTAL_MENSAL_PC, pof_design,seq(0.1,0.9,0.1)),Inf)
+  ) 
 
 familias_classes_renda_design <- 
   transform(
@@ -418,16 +420,10 @@ familias_classes_renda_design <-
                         breaks = k,
                         include.lowest = T,
                         ordered_result = T,
-                        labels = c("Até 2",
-                                   "entre 2 e 3",
-                                   "entre 3 e 5",
-                                   "entre 5 e 6",
-                                   "entre 6 e 8",
-                                   "entre 8 e 10",
-                                   "entre 10 e 15",
-                                   "entre 15 e 20",
-                                   "entre 20 e 30",
-                                   "mais que 30")))
+                        labels = c(paste("Até", k[2]),
+                                   paste(paste(rep("entre",8),k[2:9]),
+                                         paste(rep("e",8),k[3:10])),
+                                   paste("Mais que", k[10]))))
 
 #View(familias_classes_renda_design$variables %>% select(RENDA_TOTAL_MENSAL_PC,classes_renda))
 
@@ -618,7 +614,7 @@ kbl(tabela_participacao,col.names = c("Salários mínimos",
 rm(tabela_participacao)
 ```
 
-## 7. Comparando o gini nos estágios de renda
+## Comparando o gini nos estágios de renda
 
 ### Tratando a base de moradores
 
@@ -692,41 +688,7 @@ Refêrencia: https://econpolrg.files.wordpress.com/2013/05/medeiros_2012_medidas
 
 "A noção de concentração usada nas Curvas de Concentração diz respeito à distribuição de uma variável em uma população classificada segundo uma outra variável."(Medeiros, 2012)
 
-## 8. Índice de Lerman-Yitzhaki
-
-### Referências
-
-#### ANÁLISE DA PROGRESSIVIDADE DA CARGA TRIBUTÁRIA SOBRE A POPULAÇÃO BRASILEIRA (Pinto payeras, 2010).
-Consolida o índice de Lerman-yitzhaki denominado por hoffman em 2009, em uma formula fechada, sendo ela
-
-$ \pi = C_Z^* - G_Z $
-
-em que $C_Z^*$ é o coeficiente de concentração do imposto a partir da ordenação da renda pós imposto e $G_Z$ é o Gini da renda após o imposto.
-O autor utiliza esse índice para avaliar o quanto os impostos avaliados são progressivos ou regressivos
-
-#### Medindo a Progressividade das Transferências (Hoffman, 2007)
-Propõe uma formula para medir a progressividade das transferências a partir de trabalhos como o de Kakwani e de Lerman e Yitzhaki, em que chama o "índice de Lerman-Yitzaki" de índice de Kakwani modificado. Nesse trabalho é possível acompanhar toda a linha de raciocínio de Hoffman para se obter a formula final:
-
-$ \Pi_k^* = C_t^* - G_Z $
-
-#### Desigualdade da distribuição da renda no Brasil: a contribuição de aposentadorias e pensões e de outras parcelas do rendimento domiciliar per capita (Hoffman, 2009)
-[link](https://www.scielo.br/j/ecos/a/jmwqt7bbDK5jK9bdqHwkWKk/?lang=pt#)
-Traz todo o cálculo até a definição do índice de Lerman-Yitzhaki, aqui denominada como "medida de progressividade de Lerman-Yitzhaki", denotada de maneira mais genérica, da seguinte forma:
-
-$ \pi_h = (\textrm{sinal de } \varphi) (G - C_h) $ 
-
-Nesse caso, o $C_h$ refere-se ao coeficiente de concentração de uma parcela da renda e o $\varphi$ é a paricipação da h-ésima parcela da renda na renda total, ou seja, no caso de um tributo que contribui negativamente para a renda total, o sinal de $\varphi$ é negativo e a medida de progressividade é denotada do mesmo modo que denotado nos trabalhos anteriores.
-
-O autor justifica o nome dado à medida da seguinte forma: "O nome dado a essa medida de progressividade é um reconhecimento do pioneirismo de Lerman e Yitzhaki (1985 e 1995), que ressaltaram a importância de considerar a ordenação das rendas finais"
-
-No trabalho o autor avaliar pensões e aposentadorias, que tratam-se de parcela spositivas da renda e desse modo, ele realiza a avaliação da regressividade a partir da subtração do coeficiente de concentração do gini.
-
-"O índice desenvolvido por estes autores 
-toma como base o ordenamento da renda final, isto é, a renda após a incidência do imposto ou do benefício. A justificativa para o uso do índice de Lerman-Yitzhaki é que deve ser levada em consideração a possibilidade de um imposto afetar a reordenação das rendas. Índices de progressividade, como o de Kakwani, que usam a ordenação da renda inicial, desconsideram a “(...) possibilidade de a ordenação das rendas finais ser diferente das rendas iniciais” (HOFFMANN, 2007b, p. 180).7Valores positivos indicam que o imposto é progressivo e valores negativos indicam que o imposto é regressivo. Será usada a ordenação da renda familiar per capita para encontrar o índice de Lerman-Yitzhaki."(Pintos-Payeras,2010)
-
-O cálculo do Índice de progressividade de Lerman e Yitzhaki é feito a partir do Índice de concetração do imposto ordenado a partir da renda final menos o índice de Gini após a aplicação do imposto, ou seja, da Renda pós o imposto em questão
-
-### Execução
+## Índice de Lerman-Yitzhaki
 
 ```{r}
 library(IC2)
@@ -734,10 +696,12 @@ library("rineq")
 
 con_index_icms <- ci(pof_design_moradores$variables$gasto_icms, pof_design_moradores$variables$renda_pos_icms,wt=pof_design_moradores$variables$peso, type = c("CI"))
 
-con_index_ipva <- ci(pof_design_moradores$variables$gasto_ipva, pof_design_moradores$variables$renda_pos_ipva,wt=pof_design_moradores$variables$peso, type = c("CI"))
+con_index_ipva <- ci(pof_design_moradores$variables$gasto_veiculos_anualizado, pof_design_moradores$variables$renda_pos_ipva,wt=pof_design_moradores$variables$peso, type = c("CI"))
 
 lerYi_icms <- con_index_icms$concentration_index - gini_pos_icms[1]/100
+lerYi_ipva <- con_index_ipva$concentration_index - gini_pos_ipva[1]/100
 
 print(lerYi_icms)
+print(lerYi_ipva)
 ```
 
