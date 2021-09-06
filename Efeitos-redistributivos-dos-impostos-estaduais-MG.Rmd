@@ -625,7 +625,19 @@ Aqui são seguidos os mesmo passos de tratamente da base das Famílias utilizada
 moradores <- readRDS("./Dados/Leitura Microdados POF/MORADOR.rds")
 
 comparação_gini <- moradores %>% select(UF,ESTRATO_POF,TIPO_SITUACAO_REG,COD_UPA,NUM_DOM,NUM_UC,V0306,V0430,V0404,V0405,INSTRUCAO,ANOS_ESTUDO,PESO_FINAL) %>% 
- mutate(FAMILIA = paste(COD_UPA,NUM_DOM,NUM_UC)) %>% 
+ mutate(FAMILIA = paste(COD_UPA,NUM_DOM,NUM_UC),
+        V0404  = ifelse(V0404 == 1, "Homem",ifelse(V0404 == 2,"Mulher","")),
+        V0405 = case_when(V0405 == 1 ~ "Branca",
+                          V0405 == 2 ~ "Preta",
+                          V0405 == 3 ~ "Amarela",
+                          V0405 == 4 ~ "Parda",
+                          V0405 == 5 ~ "Indígena",
+                          V0405 == 9 ~ "Não declarado",
+                          TRUE ~ "Vazio"),
+        INSTRUCAO_short = case_when(INSTRUCAO == 1 ~ "Sem intrução",
+                                    INSTRUCAO <= 4 ~ "Até Fundamental completo",
+                                    INSTRUCAO <= 6 ~ "Até Médio completo",
+                                    INSTRUCAO == 7 ~ "Ensino Superios completo")) %>% 
  left_join(pof_impostos_srvyr_design$variables, by = "FAMILIA")
 
 
@@ -703,5 +715,14 @@ lerYi_ipva <- con_index_ipva$concentration_index - gini_pos_ipva[1]/100
 
 print(lerYi_icms)
 print(lerYi_ipva)
+```
+
+
+
+## Cargas tributárias nos diferentes grupos sociais
+```{r}
+pof_design_moradores %>% as_survey() %>% 
+  group_by()
+
 ```
 
