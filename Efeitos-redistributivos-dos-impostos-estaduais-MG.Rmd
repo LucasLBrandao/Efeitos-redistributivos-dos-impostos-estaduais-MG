@@ -628,16 +628,20 @@ comparação_gini <- moradores %>% select(UF,ESTRATO_POF,TIPO_SITUACAO_REG,COD_U
  mutate(FAMILIA = paste(COD_UPA,NUM_DOM,NUM_UC),
         V0404  = ifelse(V0404 == 1, "Homem",ifelse(V0404 == 2,"Mulher","")),
         V0405 = case_when(V0405 == 1 ~ "Branca",
-                          V0405 == 2 ~ "Preta",
+                          V0405 %in% c(2,4) ~ "Negra",
                           V0405 == 3 ~ "Amarela",
-                          V0405 == 4 ~ "Parda",
                           V0405 == 5 ~ "Indígena",
                           V0405 == 9 ~ "Não declarado",
                           TRUE ~ "Vazio"),
         INSTRUCAO_short = case_when(INSTRUCAO == 1 ~ "Sem intrução",
                                     INSTRUCAO <= 4 ~ "Até Fundamental completo",
                                     INSTRUCAO <= 6 ~ "Até Médio completo",
-                                    INSTRUCAO == 7 ~ "Ensino Superios completo")) %>% 
+                                    INSTRUCAO == 7 ~ "Ensino Superior completo",
+                                    TRUE ~ "Não considerado")) %>% 
+  mutate(INSTRUCAO_short = factor(INSTRUCAO_short, levels = c("Sem intrução",
+                                                              "Até Fundamental completo",
+                                                              "Até Médio completo",
+                                                              "Ensino Superior completo"))) %>% 
  left_join(pof_impostos_srvyr_design$variables, by = "FAMILIA")
 
 
@@ -719,10 +723,259 @@ print(lerYi_ipva)
 
 
 
-## Cargas tributárias nos diferentes grupos sociais
+## Despesas com impostos nos diferentes grupos sociais
+
+Por raça
+
 ```{r}
-pof_design_moradores %>% as_survey() %>% 
-  group_by()
+tabela_raca_gasto <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(V0405) %>%
+  summarise(renda_total_media = survey_mean(RENDA_TOTAL_ANUAL,w = peso,na.rm = T),
+            despesa_ipva_media = survey_mean(gasto_veiculos_anualizado,w = peso,na.rm = T),
+            despesa_icms_media = survey_mean(gasto_icms,w = peso, na.rm = T),
+            despesa_total_media = survey_mean(gasto_impostos,w = peso,na.rm = T)) %>% 
+  mutate(gastoemipva =scales::percent(despesa_ipva_media/renda_total_media),
+         gastoemicms = scales::percent(despesa_icms_media/renda_total_media),
+         gastoemimpostos = scales::percent(despesa_total_media/renda_total_media))
+
+tabela_raca_gasto <- tabela_raca_gasto %>% select(-c(renda_total_media_se,
+                                                         despesa_ipva_media_se,
+                                                         despesa_icms_media_se,
+                                                         despesa_total_media_se)) %>% 
+  filter(V0405 != "Não declarado")
+
+kbl(tabela_raca_gasto,col.names = c("Raça",
+                                      "Renda total média",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais"),
+      align = c("lcccccc"),
+      booktabs = T,
+      caption = "Carga tributária entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 2, "Despesa média" = 3, "% da Renda total média"))
+
 
 ```
+
+Por sexo
+
+```{r}
+
+tabela_sexo_gasto <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(V0404) %>%
+  summarise(renda_total_media = survey_mean(RENDA_TOTAL_ANUAL,w = peso,na.rm = T),
+            despesa_ipva_media = survey_mean(gasto_veiculos_anualizado,w = peso,na.rm = T),
+            despesa_icms_media = survey_mean(gasto_icms,w = peso, na.rm = T),
+            despesa_total_media = survey_mean(gasto_impostos,w = peso,na.rm = T)) %>% 
+  mutate(gastoemipva =scales::percent(despesa_ipva_media/renda_total_media),
+         gastoemicms = scales::percent(despesa_icms_media/renda_total_media),
+         gastoemimpostos = scales::percent(despesa_total_media/renda_total_media))
+
+tabela_sexo_gasto <- tabela_sexo_gasto %>% select(-c(renda_total_media_se,
+                                                         despesa_ipva_media_se,
+                                                         despesa_icms_media_se,
+                                                         despesa_total_media_se))
+
+kbl(tabela_sexo_gasto,col.names = c("Sexo",
+                                      "Renda total média",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais"),
+      align = c("lcccccc"),
+      booktabs = T,
+      caption = "Carga tributária entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 2, "Despesa média" = 3, "% da Renda total média"))
+
+```
+
+
+por escolaridade
+
+```{r}
+tabela_escola_gasto <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(INSTRUCAO_short) %>%
+  summarise(renda_total_media = survey_mean(RENDA_TOTAL_ANUAL,w = peso,na.rm = T),
+            despesa_ipva_media = survey_mean(gasto_veiculos_anualizado,w = peso,na.rm = T),
+            despesa_icms_media = survey_mean(gasto_icms,w = peso, na.rm = T),
+            despesa_total_media = survey_mean(gasto_impostos,w = peso,na.rm = T)) %>% 
+  mutate(gastoemipva =scales::percent(despesa_ipva_media/renda_total_media),
+         gastoemicms = scales::percent(despesa_icms_media/renda_total_media),
+         gastoemimpostos = scales::percent(despesa_total_media/renda_total_media))
+
+tabela_escola_gasto <- tabela_escola_gasto %>% select(-c(renda_total_media_se,
+                                                         despesa_ipva_media_se,
+                                                         despesa_icms_media_se,
+                                                         despesa_total_media_se)) %>% 
+  filter(INSTRUCAO_short != "Não considerado")
+
+kbl(tabela_escola_gasto,col.names = c("Escolaridade",
+                                      "Renda total média",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais"),
+      align = c("lcccccc"),
+      booktabs = T,
+      caption = "Carga tributária entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 2, "Despesa média" = 3, "% da Renda total média"))
+
+```
+
+
+## Participação no gasto tributário
+
+Por raça
+
+```{r}
+tabela_raca_participacao <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(V0405) %>% 
+  summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
+            despesa_ipva_total = survey_total(gasto_veiculos_anualizado,na.rm= T),
+            despesa_icms_total = survey_total(gasto_icms,na.rm = T),
+            despesa_total = survey_total(gasto_impostos,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(part_renda = scales::percent(renda_total/sum(renda_total)),
+         part_ipva = scales::percent(despesa_ipva_total/sum(despesa_ipva_total)),
+         part_icms = scales::percent(despesa_icms_total/sum(despesa_icms_total)),
+         part_impostos = scales::percent(despesa_total/sum(despesa_total)))
+
+tabela_raca_participacao <- tabela_raca_participacao %>% select(-c(renda_total,
+                                                         despesa_ipva_total,
+                                                         despesa_icms_total,
+                                                         despesa_total,
+                                                         renda_total_se,
+                                                         despesa_ipva_total_se,
+                                                         despesa_icms_total_se,
+                                                         despesa_total_se))%>% 
+  filter(V0405 != "Não declarado")
+
+kbl(tabela_raca_participacao,col.names = c("Raça",
+                                      "Renda total",
+                                      "Gasto com IPVA",
+                                      "Gasto com ICMS",
+                                      "Gasto com impostos"),
+      align = c("lcccc"),
+      booktabs = T,
+      caption = "Participação no gasto com impostos entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 4))
+
+```
+
+por sexo
+
+```{r}
+
+tabela_sexo_participacao <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(V0404) %>% 
+  summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
+            despesa_ipva_total = survey_total(gasto_veiculos_anualizado,na.rm= T),
+            despesa_icms_total = survey_total(gasto_icms,na.rm = T),
+            despesa_total = survey_total(gasto_impostos,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(part_renda = scales::percent(renda_total/sum(renda_total)),
+         part_ipva = scales::percent(despesa_ipva_total/sum(despesa_ipva_total)),
+         part_icms = scales::percent(despesa_icms_total/sum(despesa_icms_total)),
+         part_impostos = scales::percent(despesa_total/sum(despesa_total)))
+
+tabela_sexo_participacao <- tabela_sexo_participacao %>% select(-c(renda_total,
+                                                         despesa_ipva_total,
+                                                         despesa_icms_total,
+                                                         despesa_total,
+                                                         renda_total_se,
+                                                         despesa_ipva_total_se,
+                                                         despesa_icms_total_se,
+                                                         despesa_total_se))
+
+kbl(tabela_sexo_participacao,col.names = c("Sexo",
+                                      "Renda total",
+                                      "Gasto com IPVA",
+                                      "Gasto com ICMS",
+                                      "Gasto com impostos"),
+      align = c("lcccc"),
+      booktabs = T,
+      caption = "Participação no gasto com impostos entre os sexos",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 4))
+
+
+```
+
+por escolaridade
+
+```{r}
+
+tabela_escola_participacao <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(INSTRUCAO_short) %>% 
+  summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
+            despesa_ipva_total = survey_total(gasto_veiculos_anualizado,na.rm= T),
+            despesa_icms_total = survey_total(gasto_icms,na.rm = T),
+            despesa_total = survey_total(gasto_impostos,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(part_renda = scales::percent(renda_total/sum(renda_total)),
+         part_ipva = scales::percent(despesa_ipva_total/sum(despesa_ipva_total)),
+         part_icms = scales::percent(despesa_icms_total/sum(despesa_icms_total)),
+         part_impostos = scales::percent(despesa_total/sum(despesa_total)))
+
+tabela_escola_participacao <- tabela_escola_participacao %>% select(-c(renda_total,
+                                                         despesa_ipva_total,
+                                                         despesa_icms_total,
+                                                         despesa_total,
+                                                         renda_total_se,
+                                                         despesa_ipva_total_se,
+                                                         despesa_icms_total_se,
+                                                         despesa_total_se)) %>% 
+  filter(INSTRUCAO_short != "Não considerado")
+
+kbl(tabela_escola_participacao,col.names = c("Escolaridade",
+                                      "Renda total",
+                                      "Gasto com IPVA",
+                                      "Gasto com ICMS",
+                                      "Gasto com impostos"),
+      align = c("lcccc"),
+      booktabs = T,
+      caption = "Participação no gasto com impostos entre diferentes escolaridades",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 4))
+
+
+```
+
+
+
 
