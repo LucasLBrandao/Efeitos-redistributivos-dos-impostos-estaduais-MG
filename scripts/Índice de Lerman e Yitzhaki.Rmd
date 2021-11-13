@@ -1,0 +1,40 @@
+---
+title: "Untitled"
+author: "Lucas Brandão"
+date: "05/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### ANÁLISE DA PROGRESSIVIDADE DA CARGA TRIBUTÁRIA SOBRE A POPULAÇÃO BRASILEIRA (Pinto payeras, 2010).
+
+Consolida o índice de Lerman-yitzhaki denominado por hoffman em 2009, em uma formula fechada, sendo ela
+
+$\pi = C_Z^* - G_Z$
+
+em que $C_Z^*$ é o coeficiente de concentração do imposto a partir da ordenação da renda pós imposto e $G_Z$ é o Gini da renda após o imposto. O autor utiliza esse índice para avaliar o quanto os impostos avaliados são progressivos ou regressivos
+
+#### Medindo a Progressividade das Transferências (Hoffman, 2007)
+
+Propõe uma formula para medir a progressividade das transferências a partir de trabalhos como o de Kakwani e de Lerman e Yitzhaki, em que chama o "índice de Lerman-Yitzaki" de índice de Kakwani modificado. Nesse trabalho é possível acompanhar toda a linha de raciocínio de Hoffman para se obter a formula final:
+
+$\Pi_k^* = C_t^* - G_Z$
+
+#### Desigualdade da distribuição da renda no Brasil: a contribuição de aposentadorias e pensões e de outras parcelas do rendimento domiciliar per capita (Hoffman, 2009)
+
+[link](https://www.scielo.br/j/ecos/a/jmwqt7bbDK5jK9bdqHwkWKk/?lang=pt#) Traz todo o cálculo até a definição do índice de Lerman-Yitzhaki, aqui denominada como "medida de progressividade de Lerman-Yitzhaki", denotada de maneira mais genérica, da seguinte forma:
+
+$\pi_h = (\textrm{sinal de } \varphi) (G - C_h)$
+
+Nesse caso, o \$ C_h \$ refere-se ao coeficiente de concentração de uma parcela da renda e o \$ \varphi \$ é a paricipação da h-ésima parcela da renda na renda total, ou seja, no caso de um tributo que contribui negativamente para a renda total, o sinal de $\varphi$ é negativo e a medida de progressividade é denotada do mesmo modo que denotado nos trabalhos anteriores.
+
+O autor justifica o nome dado à medida da seguinte forma: "O nome dado a essa medida de progressividade é um reconhecimento do pioneirismo de Lerman e Yitzhaki (1985 e 1995), que ressaltaram a importância de considerar a ordenação das rendas finais"
+
+No trabalho o autor avaliar pensões e aposentadorias, que tratam-se de parcela spositivas da renda e desse modo, ele realiza a avaliação da regressividade a partir da subtração do coeficiente de concentração do gini.
+
+"O índice desenvolvido por estes autores toma como base o ordenamento da renda final, isto é, a renda após a incidência do imposto ou do benefício. A justificativa para o uso do índice de Lerman-Yitzhaki é que deve ser levada em consideração a possibilidade de um imposto afetar a reordenação das rendas. Índices de progressividade, como o de Kakwani, que usam a ordenação da renda inicial, desconsideram a "(...) possibilidade de a ordenação das rendas finais ser diferente das rendas iniciais" (HOFFMANN, 2007b, p. 180).7Valores positivos indicam que o imposto é progressivo e valores negativos indicam que o imposto é regressivo. Será usada a ordenação da renda familiar per capita para encontrar o índice de Lerman-Yitzhaki."(Pintos-Payeras,2010)
+
+O cálculo do Índice de progressividade de Lerman e Yitzhaki é feito a partir do Índice de concetração do imposto ordenado a partir da renda final menos o índice de Gini após a aplicação do imposto, ou seja, da Renda pós o imposto em questão

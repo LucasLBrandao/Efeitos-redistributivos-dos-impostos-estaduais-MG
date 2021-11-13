@@ -1,0 +1,67 @@
+---
+title: "demonstração Índice de Lerman-Yitzhaki"
+author: "Lucas Brandão"
+date: "01/11/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+Segundo Hoffman é possível escrever o índice de gini como sendo 
+
+$G = \dfrac{2}{n\mu} cov(i,x_i)$ (1)
+
+considerando que $x_i$ é composta por $h$ parcelas de renda, temos:
+
+$x_i = x_{1i}+x_{2i}+...+x_{hi}$ (2)
+
+aplicando (2) em (1) temos
+
+$G = \dfrac{2}{n\mu} cov(i,x_{1i}+x_{2i}+...+x_{hi})$ 
+
+que pode ser representado como
+
+$G = \dfrac{2}{n\mu} \sum\limits_{i = 1}^kcov(i,x_{hi})$ 
+
+podemos então escrever a equação da seguinte forma
+
+$G = \sum\limits_{h = 1}^k \dfrac{2}{n\mu}cov(i,x_{hi})$ 
+
+pode-se multiplicar então a equação dentro do somatório por $\dfrac{\mu_h}{\mu_h}$,visto ser igual a 1
+
+$G = \sum\limits_{h = 1}^k \dfrac{\mu_h}{\mu_h} \dfrac{2}{n\mu}cov(i,x_{hi})$ 
+
+reordenando os componentes da fração podemos escrever da seguinte forma 
+
+$G = \sum\limits_{h = 1}^k \dfrac{\mu_h}{\mu} \dfrac{2}{n\mu_h}cov(i,x_{hi})$
+
+a primeira fração refere-se a proporção da parcela da renda $h$ da renda total, podemos denomina-la $\varphi_h$. 
+
+$G = \sum\limits_{h = 1}^k \varphi_h \dfrac{2}{n\mu_h}cov(i,x_{hi})$
+
+como (1) representa o índice de gini da renda $x$ ou seja, o coeficiente de concentração da renda $x$ ordenado pela renda $x$, podemos dizer que a parcela da equação após $\varphi_h$ representa o coeficiente de concentração da parcela da $h$ da renda ordenada pela renda $x$.
+
+$G = \sum\limits_{h = 1}^k \varphi_h C_h$
+
+ou seja, gini é igual à média ponderada dos coeficientes de concentração das parcelas que a compõe ordenadas pela renda. Para tornar explicíta a relação de uma parcela no índice geral podemos escrever a equação da seguinte forma:
+
+$G = G - \sum\limits_{i=1}^k \varphi_h G - \sum\limits_{i=1}^k \varphi_h C_h$
+
+Considerando que o segundo e o terceiro argumentos são iguais ao Gini (ou seja, a fórmula pode ser lida como sendo gini é igual a gini menos 0). A fórmula pode ser simplificada como:
+
+$G = G - \sum\limits_{i=1}^k \varphi_h (G - C_h)$
+
+Assim, é possível analisar a contribuição de uma parcela $h$ no Gini através da fórmula
+
+$\varphi_h (G - C_h)$
+
+Podendo ser um contribuição negativa (redução da desigualdade) ou positiva (aumento da desigualdade). Hoffman (2009) define então a medida de progressividade de Lerman-yithzaki como: 
+
+$\pi_h = (\textrm{sinal de } \varphi_h) (G - C_h)$
+
+Em que o $C_h$ refere-se ao coeficiente de concentração de uma parcela da renda, G ao índice de Gini da renda contabilizando essa parcela e o $\varphi$ é a paricipação da h-ésima parcela da renda na renda total.
+Como impostos representam uma parcela negativa da renda (ou seja, $\varphi$ negativo), para analisar sua progressividade ou regressividade devemos utilizar a seguinte fórmula:
+
+$\pi_h = C_h - G$
+
+O autor justifica o nome dado à medida da seguinte forma: "O nome dado a essa medida de progressividade é um reconhecimento do pioneirismo de Lerman e Yitzhaki (1985 e 1995), que ressaltaram a importância de considerar a ordenação das rendas finais"(Hoffman,2009).

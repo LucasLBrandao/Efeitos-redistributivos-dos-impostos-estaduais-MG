@@ -1,0 +1,1094 @@
+---
+title: "Efeitos redistributivos dos impostos estaduais"
+author: "Lucas Brandão"
+date: "8/12/2021"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = F, result = F,message = F)
+
+library(readxl)
+library(tidyverse)
+library(agricolae)
+library(scales)
+library(kableExtra)
+library(sjstats)
+```
+
+
+# Preparação dos dados
+
+Referências: 
+
+http://asdfree.com/pesquisa-de-orcamentos-familiares-pof.html
+
+https://guilhermejacob.github.io/context/
+
+## Cálculo da renda por família
+
+A decisão de qual renda utilizar  exige um entendimento das variáveis disponíveis no microdados da POF. Neles, cada morador conta com uma RENDA_TOTAL. Essa variável aponta para o rendimento bruto total mensal da Unidade de Consumo. Este é obtido através do somatório dos rendimento brutos monetários mensais de todos os moradores da Unidade de Consumo. Esses podem ser obtidos através do trabalho, transferência e outras rendas. São somados também os rendimentos não monetário mensais do domicílio, acrescido da variação patrimonial que inclui vendas de imóveis, recebimentos de heranças e o saldo positivo da movimentação financeira - ou seja, traz a disponibilidade bruta de recursos da família.
+
+Além da RENDA_TOTAL é disponibilizada a Renda disponível familiar per capita (PC_RENDA_DISP). Esta é obtida a partir da divisão do total da renda disponível da Unidade de Consumo pelo total de moradores. O total da renda disponível é calculada a partir da soma dos rendimentos monetários e não monetários menos impostos diretos, contribuições sociais e outras deduções compulsórias ou quase compulsórias. Dessa forma, esse indicador não considera a variação patrimonial, considerado na RENDA_TOTAL. 
+
+Dessa forma, como a Renda total nos permite ter uma ideia melhor da disponibilidade de recursos dos indivíduos e assim, de seu padrão de vida, é razoável classificar as famílias por meio dessa variável. Podemos calcular a partir da renda total um valor para a renda disponível considerando a variação patrimonial, pois também é disponibilizada a Dedução familiar per capita de cada Unidade de consumo.
+
+### Variável para classificar as famílias
+Temos então 3 opções para classificar as famílias:
+
+1 - Renda total mensal domiciliar per capita
+2 - Renda disponível mensal domiciliar per capita
+3 - Renda total mensal domiciliar per capita - deduções mensal domiciliar per capita + IPVA
+
+### Variável para calcular a distribuição tributária
+
+1 - Renda total anual por UC
+2 - Renda disponível anual por UC
+3 - Renda total anual por uc - deduções anual por uc
+
+No código abaixo então, calculo os 3 tipos de renda tanto anual quanto mensal per capita
+
+```{r}
+morador <- readRDS("./Dados/Leitura Microdados POF/MORADOR.rds")
+
+carac_familias <- morador %>% 
+  # Criando um código da família a partir do código da Unidade primária de amostragem, do número do domicílio
+  # e do número da unidade de consumo
+  mutate(FAMILIA = paste(COD_UPA,NUM_DOM,NUM_UC)) %>%
+  group_by(FAMILIA) %>% 
+  summarise(#Caracterísitcas da amostra
+            UPA = first(COD_UPA),
+            ESTRATO = first(ESTRATO_POF),
+            peso = first(PESO_FINAL),
+            
+    # Contando todos as linhas que não são empregado doméstico ou parente do empregado doméstico
+    n_moradores = sum(!V0306 %in% c(18,19)),
+            # Renda total
+            RENDA_TOTAL_MENSAL_PC = mean(RENDA_TOTAL)/n_moradores,
+            RENDA_TOTAL_ANUAL = mean(RENDA_TOTAL)*12,
+            
+            # Renda disponível
+            RENDA_DISP_MENSAL_PC = mean(PC_RENDA_DISP),
+            RENDA_DISP_ANUAL = mean(PC_RENDA_DISP)*n_moradores*12,
+            
+            # Renda total disponível
+            RENDA_TOTDISP_MENSAL_PC = mean(RENDA_TOTAL)/n_moradores - mean(PC_DEDUCAO),
+            RENDA_TOTDISP_ANUAL = mean(RENDA_TOTAL)*12 - mean(PC_DEDUCAO)*n_moradores*12,
+            
+            # Características gerais
+            sexo_ref = max(V0404[V0306 == 01]),
+            raça_ref = max(V0405[V0306 == 01]),
+            escola_ref = max(INSTRUCAO[V0306 == 01]))
+
+rm(morador)
+```
+
+## Cálculo do total gasto  anualmente com IPVA por unidade de consumo
+
+Iniciando com o cálculo mais simples, primeiramente estimamos o gasto anual com IPVA e taxa relacionadas à veículos. A POF dispõe de um quadro voltado apenas para despesas com veículos, que conta com os seguintes tipos de despesa:
+1 - IPVA
+2 - Emplacamento de Automóvel
+3 - Licença de direção
+4 - Multas
+5 - Taxas do Detran referentes à transferência, alienação, carteira, vistoria, etc.
+6 - Exames psicoténicos e de renovação de carteira
+
+Assim, para obter o gasto de cada família com despesas com IPVA e taxas relacionadas primeiramente foi criada a variável "FAMILIA" a partir da concatenação das variáveis código da unidade amostral, número do domicílio e número da unidade de consumo. Em seguida substituímos os valores vazios na variável v9011  - que representa o número de meses nos quais a despesa ocorreu - por 1, tendo em vista que utilizaremos essa variável para anualizar os valores. Em seguida foi calculado o gasto anualizado, multiplicando o gasto já deflacionado, o fator de anualização e a variável citada anteriormente. por fim, agrupamos a base pela variável família e calcumaos a soma da variável "Gasto anualizado" para cada família apenas para os tipos de despesa elencados no parágrafo anterior.
+
+```{r}
+despesa_individual <- readRDS("./Dados/Leitura Microdados POF/DESPESA_INDIVIDUAL.rds")
+
+gasto_veiculos <- despesa_individual %>% 
+        mutate(FAMILIA = paste(COD_UPA,NUM_DOM,NUM_UC),
+               V9011 = ifelse(is.na(V9011),1,V9011),
+               gasto_anualizado = V8000_DEFLA*FATOR_ANUALIZACAO*V9011) %>%
+        group_by(FAMILIA) %>% 
+       summarize(gasto_veiculos_anualizado = sum(gasto_anualizado[QUADRO == 50 &
+                                                                    !V9001 %in% c(5000201,5000301,5001001,5001101,5001201,5001202,5001301,5001401,5001501)]))
+
+rm(despesa_individual)
+
+```
+
+
+## Cálculo do total gasto anualmente com ICMS por unidade de consumo
+
+### Cálculo do gasto anual de cada família com cada despesa
+
+Nessa etapa desejo como resultado uma tabela contendo o gasto de cada família com cada tipo de produto no período de 1 ano. Para isso, primeiramente importo os microdados da caderneta coletiva, da despesa coletiva e das despesas individuais.
+
+```{r}
+
+caderneta_coletiva <- readRDS("./Dados/Leitura Microdados POF/CADERNETA_COLETIVA.rds")
+despesa_coletiva <- readRDS("./Dados/Leitura Microdados POF/DESPESA_COLETIVA.rds")
+despesa_individual <- readRDS("./Dados/Leitura Microdados POF/DESPESA_INDIVIDUAL.rds")
+```
+
+Em seguida trato os 3 microdados, excluindo as formas de aquisição - que identificam a forma pela qual o tipo de produto ou serviço foi adquirido pela unidade de consumo no período de referência da pesquisa - referentes à Doação, Retirada do Negócio, Produção própria e Outra. 
+
+Crio então uma nova dimensão para servir como identificador da Unidade de Consumo, concatentando o Código da Unidade Primário de Amostragem, o Número do Domícilio e o Número da Unidade de Consumo (Variáveis UPA, NUM_DOM e NUM_UC nos 3 microdados)
+
+Em seguida anualizo os gastos a partir da multiplicação do fator de anualização pelo valor da despesa deflacionado e pelo Número de meses que a despesa/aquisição foi realizada pela unidade, nos casos cabíveis.
+
+Após anualizar os gastos, agrupo os microdados pelo identificador da unidade de consumo (aqui denominado "FAMILIA") e pelo código do tipo de despesa/aquisição (variável V9001).
+
+```{r ok}
+prod_UC_caderneta_coletiva <- caderneta_coletiva %>%
+        # Filtro para despesas apenas referentes à gastos
+        filter(V9002 <= 6) %>% 
+        mutate(FAMILIA = paste(COD_UPA,NUM_DOM,NUM_UC),
+               gasto_anualizado = V8000_DEFLA*FATOR_ANUALIZACAO) %>% 
+        group_by(FAMILIA,V9001) %>% 
+        summarize(despesa = sum(gasto_anualizado))
+
+prod_UC_despesa_coletiva <- despesa_coletiva %>%
+  # Filtro para despesas apenas referentes à gastos
+        filter(V9002 <= 6) %>% 
+        mutate(V9011 = ifelse(QUADRO  %in% c(10,19),V9011,1),
+               V9011 = ifelse(is.na(V9011)|V9011 == 0,1,V9011),
+               FAMILIA = paste(COD_UPA,NUM_DOM,NUM_UC),
+               gasto_anualizado = V8000_DEFLA*FATOR_ANUALIZACAO*V9011) %>% 
+        group_by(FAMILIA,V9001) %>% 
+        summarize(despesa = sum(gasto_anualizado))
+
+prod_UC_despesa_individual <- despesa_individual %>%
+        filter(V9002 <= 6) %>% 
+        mutate(V9011 = ifelse(QUADRO  %in% c( 44, 47, 48, 49, 50),V9011,1),
+               V9011 = ifelse(is.na(V9011)|V9011 == 0,1,V9011),
+               FAMILIA = paste(COD_UPA,NUM_DOM,NUM_UC),
+               gasto_anualizado = V8000_DEFLA*FATOR_ANUALIZACAO*V9011) %>% 
+        group_by(FAMILIA,V9001) %>% 
+        summarize(despesa = sum(gasto_anualizado))
+
+prod_uc_despesas <- rbind(prod_UC_caderneta_coletiva,prod_UC_despesa_coletiva,prod_UC_despesa_individual)
+
+rm(prod_UC_caderneta_coletiva,prod_UC_despesa_coletiva,prod_UC_despesa_individual,
+   despesa_coletiva,caderneta_coletiva,despesa_individual)
+```
+
+
+### Cálculo da alíquota efetiva do ICMS para cada produto da TRU (Problemático)
+
+Para cálculo da alíquota efetiva seguiremos a metodologia feita por Afonso et al. (2004).
+Afonso parte do pressuposto de que os insumos dos produtos não são tributados, pelo icms se tratar de um Imposto sobre valor adicionado. assim a base de cálculo seriam os componentes da demanda final. para manter esse pressuposto é importante utilizarmos os produtos presentes na Matriz Insumo produtoque apresentam maior participação do consumo das famílias na demanda final.
+
+Para realizar tal análise primeiramente importamos e tratamos os dados da tabela de recursos e usos de 2018 referentes à Oferta de bens e serviços à valores correntes. Em seguida importamos e tratamos os dados da tabela de recursos e uso de 2018 referentes à demanda final.
+
+```{r}
+tru_icms <-  read_xls("./Dados/tabelas_de_recursos_e_usos/68_tab1_2018 - arrecadado em icms.xls", skip = 3)
+
+colnames(tru_icms)[1] <- "COD_PROD_TRU"
+
+tru_icms <- tru_icms %>% select(COD_PROD_TRU,ICMS) %>% filter(COD_PROD_TRU != "Total",
+                                                              !is.na(COD_PROD_TRU))
+
+tru_consumo <-  read_xls("./Dados/tabelas_de_recursos_e_usos/68_tab2_2018 - consumo das famílias.xls", skip = 3,sheet = 2)
+
+colnames(tru_consumo)[c(1,6)] <- c("COD_PROD_TRU","consumo_familias")
+
+
+```
+
+
+Em seguida, para permitir a análise posterior, calculamos a % da demanda final de cada produto referente ao consumo das famílias. 
+
+```{r}
+tru_consumo <- tru_consumo %>%
+  rowwise() %>% 
+  mutate(perc_familias = consumo_familias/(`Exportação\nde bens e\nserviços (1)` + `Consumo\ndo governo` + `Consumo\ndas\n ISFLSF` + consumo_familias)) %>% 
+        #select(COD_PROD_TRU,consumo_familias,perc_familias) %>%
+        filter(COD_PROD_TRU != "Total",!is.na(COD_PROD_TRU))
+
+
+tru_consumo_selecionado <- tru_consumo %>% filter(perc_familias > 0.4)
+```
+
+
+Por fim, unimos as duas tabelas e calculamos o ICMS efeitivo a partir da divisão do valor do ICMS arrecadado de cada produto presente na tabela de oferta pelo consumo das famílias presente na tabela de demanda. Assim, dispomos de uma tabela contendo o código da atividade e seu ICMS efetivo
+
+```{r}
+
+tru_consumo_icms <- tru_consumo_selecionado %>% 
+        left_join(tru_icms, by = "COD_PROD_TRU") %>% 
+        mutate(icms_efetivo = ICMS/consumo_familias)
+
+rm(tru_consumo,tru_icms)
+
+# Produtos com icms > 1 presentes no tradutor:  20911,20923,13001,20921,18001,49001,19915,01921,01915,23003
+
+```
+
+
+#### Compatibilização da TRU com a POF
+
+Com a tabela contendo o ICMS efetivo de cada produto da TRU, é necessário compatibilizar tais produtos com aqueles presentes na POF. Para tal o IBGE disponibiliza o tradutor POF - Contas nacionais, que traz a correspondência entre esses dois tipos de produto. Para realizar a compatibilização então importei o arquivo do tradutor e converti a coluna referente aos códigos do produto da POF para numérica, de modo que eu consiga realizar a junção dessa tabela com a base que contém os gastos com produtos futuramente.
+
+```{r ok}
+tradutor <- read_xls("./Dados/tabelas_de_recursos_e_usos/Tradutor_POF2009_ContasNacionais.xls", skip = 1)
+
+tradutor <- tradutor %>% mutate(`Produto POF` = as.numeric(`Produto POF`))
+
+```
+
+Feito o tratamento, apenas realizei a junção entre a tabela do tradutor e a tabela que construí anteriormente, a partir do código do produto na TRU.
+
+```{r ok}
+
+tradutor_icms <- tradutor %>% 
+  left_join(tru_consumo_icms %>% 
+              select(COD_PROD_TRU,icms_efetivo,perc_familias), by = c("Produto Contas Nacionais"= "COD_PROD_TRU"))
+
+tradutor_icms <- tradutor_icms %>% mutate(`Produto POF4` = substr(`Produto POF`,1,nchar(`Produto POF`)-2)) 
+
+rm(tradutor,tru_consumo_icms)
+```
+
+Como resultado dessa etapa obtenho uma tabela que contem os códigos dos produtos da POF e o ICMS efetivo de cada um deles, a partir da conexão com o código dos produtos presentes nas tabelas de recursos e usos. Posso então proceder com a aplicação dessas alíquotas nas despesas das famílias que calculei anteriormente.
+
+
+```{r}
+prods_despesas_familia <- data.frame(produtos = unique(prod_uc_despesas$V9001))
+
+demanda_prod_pof <- prods_despesas_familia %>% 
+  left_join(tradutor_icms, by = c("produtos" = "Produto POF")) 
+
+unique_demanda_prod_pof <- demanda_prod_pof %>% 
+  distinct(`Produto Contas Nacionais`,perc_familias) %>% 
+  summarise(n = quantile(perc_familias,na.rm = T))
+
+rm(prods_despesas_familia,demanda_prod_pof,unique_demanda_prod_pof)
+
+```
+
+
+### Cálculo do gasto com imposto em cada despesa
+
+Finalmente, para que calculemos a despesa total gasta com o ICMS, foi feita a junção da tabela contendo os gastos de cada família com cada tipo de produto da POF e da tabela contendo o ICMS efetivo de cada um dos produtos. Para calcular o gasto com o ICMS foi necessário seguir os seguintes passos:
+
+&nbsp;
+&nbsp;
+&nbsp;
+
+$p_1 = p_0 (1 + t)$   (1) 
+
+&nbsp;
+&nbsp;
+&nbsp;
+
+$p_0 = \dfrac{p_1}{(1 + t)}$ (2)  
+  
+&nbsp;
+&nbsp;
+&nbsp;
+
+$p_t = p_1 - p_0$  (3)  
+  
+
+Sendo $p_0$ o preço antes do imposto, $p_1$ o preço pago pelas famílias, $t$ a alíquota do imposto e $p_t$ o valor gasto com impostos. Aplicando $(2)$ em $(3)$ temos a seguinte equação:  
+
+&nbsp;
+&nbsp;
+&nbsp;
+
+$p_t = \dfrac{p_1t}{1 + t}$  (4)
+
+&nbsp;
+&nbsp;
+&nbsp;
+
+Assim, aplicamos essa formula para cada despesa de cada família, obtendo assim uma coluna contendo o gasto com ICMS em cada produto.
+
+
+```{r}
+prod_uc_despesas_icms <- prod_uc_despesas %>% 
+  left_join(tradutor_icms %>% select(`Produto POF`,icms_efetivo), 
+            by = c("V9001" = "Produto POF")) %>% 
+        mutate(gasto_icms = despesa*icms_efetivo/(1 + icms_efetivo))
+
+rm(prod_uc_despesas)
+```
+
+### Cálculo do total gasto no ano com ICMS por família
+
+O próximo passo então consistiu em agrupar a base construída anteriormente por famílias e calcular o total gasto com os produtos e o total gasto com ICMS
+
+```{r}
+
+familia_icms <- prod_uc_despesas_icms %>% 
+        group_by(FAMILIA) %>% 
+        summarise(despesa = sum(despesa,na.rm = T),
+                  gasto_icms = sum(gasto_icms, na.rm = T))
+
+rm(prod_uc_despesas_icms)
+
+```
+
+
+## Junção do gasto com icms e ipva
+
+Em seguida foi realizada junção entre a base com os gastos com ICMS de cada família e base com os gastos com veículos de cada família, a partir do código da unidade de consumo. Em seguida foi criada a variável `gasto_impostos` que refere-se a soma do gasto com ICMS e do gasto com veículos, ambos anuais.
+
+```{r}
+familia_icms_impostos <- familia_icms %>% 
+        full_join(gasto_veiculos, by = "FAMILIA") %>% 
+  rowwise() %>% 
+  mutate(gasto_impostos = sum(gasto_icms,gasto_veiculos_anualizado,na.rm = T))
+
+rm(familia_icms,gasto_veiculos)
+```
+
+## Criação de coluna com renda após gasto com IPVA e ICMS
+
+Em seguida, foi realizada a junção da base que contém as características de cada família. calculou-se então a Renda após dedução do IPVA (variável `renda_pos_ipva`), a partir da subtração do gasto com veículos anualizado da Renda total anual. Seguiu-se a mesma lógica para o cálculo da renda após dedução dos gastos com ICMS, mas ao invés de utilizarmos a Renda total anual como base para subtração, utilizou-se a Renda após a dedução do IPVA.
+
+```{r}
+
+familias_impostos <- carac_familias %>% 
+        left_join(familia_icms_impostos, by = "FAMILIA") %>% 
+        rowwise() %>% 
+        mutate(renda_pos_ipva = sum(RENDA_TOTAL_ANUAL, -gasto_veiculos_anualizado,na.rm = T),
+               renda_pos_icms = sum(renda_pos_ipva, - gasto_icms, na.rm = T ))
+
+rm(carac_familias,familia_icms_impostos,tradutor_icms)
+
+```
+
+
+# Verificação dos efeitos distributivos
+
+## criação do survey_design
+
+Para verificar os efeitos distributivos é necessário que consideremos o design da amostra. Para isso o R dispõe dos pacotes `survey` e `srvyr`. Para a construção do design segui as orientações presentes no seguinte trabalho http://asdfree.com/pesquisa-de-orcamentos-familiares-pof.html
+
+```{r}
+
+library(survey)
+
+pos_estrato <- read.csv("./Dados/Pos_estratos_totais.csv")
+pos_estrato_mg <- pos_estrato %>% filter(uf == 31)
+
+
+pof_df <- left_join(familias_impostos,
+                    pos_estrato, by = c("UPA"="COD_UPA.UF.SEQ.DV."))
+
+pof_df_mg <- pof_df %>% filter(uf == 31)
+
+
+pre_stratified_design_mg <- 
+    svydesign(
+        id = ~UPA , 
+        strata = ~ESTRATO ,
+        weights = ~peso ,
+        data = pof_df_mg ,
+        nest = TRUE
+    )
+
+
+population_totals_mg <- 
+    data.frame(
+        pos_estrato = unique( pos_estrato_mg$pos_estrato ) , 
+        Freq = unique( pos_estrato_mg$TOTAL_PESSOAS_REFERENCIA ) 
+    )
+
+pof_design_mg <-
+    postStratify(
+        pre_stratified_design_mg , 
+        ~ (pos_estrato) , 
+        population_totals_mg
+    )
+
+
+rm(pre_stratified_design,pos_estrato,pof_df,population_totals,familias_impostos)
+```
+
+
+## Divisão das famílias em classes de renda
+
+O primeiro passo para verificação dos efeitos distributivos é a divisão das famílias em classes de renda, de modo que possamos comparar os efeitos da tributação a diferentes niveis de renda. Para realizar a divisão utilizamos a mesma divisão utilizada por Afonso et al. (2004), em que as famílias são divididas em 10 classes, referentes à quantos salários mínimos per capita recebem por mês
+
+
+```{r}
+
+pof_design_mg <-
+    transform(
+        pof_design_mg ,
+        one = 1)
+
+svytotal( ~ one , pof_design_mg )
+
+k <- c(rep(954,11)*c(0,2,3,5,6,8,10,15,20,30,Inf))
+#k <- round(
+ # c(0,svyquantile(~RENDA_TOTAL_MENSAL_PC, pof_design_mg,seq(0.1,0.9,0.1)),Inf)
+  #) 
+
+k2 <- round(c(0,svyquantile(~RENDA_TOTAL_MENSAL_PC, pof_design_mg,seq(0.01,0.99,0.01)),Inf))
+
+familias_classes_renda_design <- 
+  transform(
+    pof_design_mg,
+    classes_renda = cut(RENDA_TOTAL_MENSAL_PC,
+                        breaks = k,
+                        include.lowest = T,
+                        ordered_result = T,
+                        labels = c(paste("Até", k[2]),
+                                   paste(paste(rep("entre",8),k[2:9]),
+                                         paste(rep("e",8),k[3:10])),
+                                   paste("Mais que", k[10]))),
+    quantis = cut(RENDA_TOTAL_MENSAL_PC,
+                  breaks = k2,
+                  include.lowest = T,
+                  ordered_result = T,
+                  labels = 1:100))
+
+#View(familias_classes_renda_design$variables %>% select(RENDA_TOTAL_MENSAL_PC,classes_renda))
+
+library(srvyr)
+pof_impostos_srvyr_design <- as_survey( familias_classes_renda_design )
+
+rm(familias_classes_renda_design,pof_design,k)
+
+saveRDS(pof_impostos_srvyr_design, file = "POF_mg_design_icms_ipva.rds")
+
+```
+
+
+### 3. Estimação da renda média e da participação na renda média
+
+Um primeiro modo de estimar os efeitos distributivos nas diferentes classes de renda criadas anteriormente é calcular a renda total anual média de cada classe, a renda pós dedução do ipva média de cada classe e a renda pós dedução do icms em cada classe. Feito isso, compara-se a participação de cada classe na soma das rendas médias. Caso observemos uma redução da participação das classes mais baixas e um aumento nas classes com maior nível de renda após aplicação e/ou após aplicação do ICMS, pode haver indícios de regressividade nesses impostos.
+
+```{r, results='markup'}
+
+tabela_media_part <- pof_impostos_srvyr_design %>% 
+  group_by(classes_renda) %>% 
+  summarise(quantidade = survey_total(),
+            renda_total_media = survey_mean(RENDA_TOTAL_ANUAL,w = peso,na.rm = T),
+            renda_pos_ipva_media = survey_mean(renda_pos_ipva,w = peso,na.rm = T),
+            renda_pos_icms_media = survey_mean(renda_pos_icms,w = peso, na.rm = T)) %>%
+ 
+  ungroup() %>% 
+  mutate(part_renda = (renda_total_media/sum(renda_total_media)),
+         part_pos_ipva = (renda_pos_ipva_media/sum(renda_pos_ipva_media)),
+         part_pos_icms = (renda_pos_icms_media/sum(renda_pos_icms_media)),
+         perd_gan_pos_ipva = part_pos_ipva - part_renda,
+         perd_gan_pos_icms = part_pos_icms - part_renda) %>% 
+  mutate(part_renda = percent(part_renda),
+         part_pos_ipva = percent(part_pos_ipva),
+         part_pos_icms = percent(part_pos_icms),
+         perd_gan_pos_ipva = percent(perd_gan_pos_ipva),
+         perd_gan_pos_icms = percent(perd_gan_pos_icms))
+
+tabela_media_part <-  tabela_media_part %>% select(-c(quantidade,quantidade_se,
+                                                    renda_total_media_se,
+                                                    renda_pos_ipva_media_se,
+                                                    renda_pos_icms_media_se,
+                                                    ))
+
+kable(tabela_media_part, digits = 2,col.names = c("Salários mínimos",
+                                                  "Total",
+                                                  "pós IPVA",
+                                                  "pós ICMS",
+                                                  "Total",
+                                                  "pós IPVA",
+                                                  "pós ICMS",
+                                                  "IPVA",
+                                                  "ICMS"),
+      align = c("lcccccccc"),
+      booktabs = T,
+      caption = "Peso médio dos impostos na Renda",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "Renda média" = 3, "% da Renda" = 3,"Variação pós"=2))
+rm(tabela_media_part)
+
+```
+
+
+### 4. Estimação da renda total média de cada classe e da despesa total média
+Um outro meio de comparar os diferentes efeitos dos impostos nos diferentes níveis de renda é calcular  além da renda total média,a despesa média com ICMS,IPVA e com os dois impostos em cada classe. a partir da despesa média com cada imposto e com ambos é possível calcularmos a razão entre esses valores e a renda total média de cada classe, permitindo que comparemos o peso que cada imposto tem em média nos diferentes níveis.
+
+```{r, results='markup'}
+
+tabela_media <- pof_impostos_srvyr_design %>% 
+  group_by(classes_renda) %>% 
+  summarise(renda_total_media = survey_mean(RENDA_TOTAL_ANUAL,w = peso,na.rm = T),
+            despesa_ipva_media = survey_mean(gasto_veiculos_anualizado,w = peso,na.rm = T),
+            despesa_icms_media = survey_mean(gasto_icms,w = peso, na.rm = T),
+            despesa_total_media = survey_mean(gasto_impostos,w = peso,na.rm = T)) %>% 
+  mutate(gastoemipva =scales::percent(despesa_ipva_media/renda_total_media),
+         gastoemicms = scales::percent(despesa_icms_media/renda_total_media),
+         gastoemimpostos = scales::percent(despesa_total_media/renda_total_media))
+
+tabela_media <- tabela_media %>% select(-c(renda_total_media_se,
+                                           despesa_ipva_media_se,
+                                           despesa_icms_media_se,
+                                           despesa_total_media_se))
+
+kable(tabela_media, digits = 2,col.names =c("Salários mínimos",
+                                            "Renda Total média",
+                                            "IPVA",
+                                            "ICMS",
+                                            "Impostos estaduais",
+                                            "IPVA",
+                                            "ICMS",
+                                            "impostos estaduais"),
+      align = c("lccccccc"),
+      booktabs = T,
+      caption = "Peso médio dos impostos na Renda",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 2, "Gasto médio com" = 3, "% da renda gasta com"=3))
+rm(tabela_media)
+
+```
+
+
+### 5. Participação de cada classe de renda para renda total pré e pós aplicação dos impostos
+
+A partir dos dados também possível compararmos a participação de cada classe no montante total de renda antes da aplicação dos impostos e após serem feitas as deduções;
+
+```{r, results='markup'}
+
+tabela_participacao_pos <- pof_impostos_srvyr_design %>% 
+  group_by(classes_renda) %>% 
+  summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
+            renda_pos_ipva_total = survey_total(renda_pos_ipva,na.rm= T),
+            renda_pos_icms_total = survey_total(renda_pos_icms,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(part_renda = percent(renda_total/sum(renda_total)),
+         part_pos_ipva = percent(renda_pos_ipva_total/sum(renda_pos_ipva_total)),
+         part_pos_icms = percent(renda_pos_icms_total/sum(renda_pos_icms_total)))
+
+tabela_participacao_pos <- tabela_participacao_pos %>% select(-c(renda_total,
+                                                                 renda_pos_ipva_total,
+                                                                 renda_pos_icms_total,
+                                                                 renda_total_se,
+                                                                 renda_pos_ipva_total_se,
+                                                                 renda_pos_icms_total_se))
+
+kable(tabela_participacao_pos,digits = 2,col.names = c("Salários mínimos",
+                                                       "Renda total",
+                                                       "Renda total pós IPVA",
+                                                       "Renda total pós ICMS"),
+       align = c("lccc"),
+      booktabs = T,
+      caption = "Participação das classes na renda pós dedução dos impostos",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 3))
+
+rm(tabela_participacao_pos)
+```
+
+
+### 6. Comparar a contribuição de cada classe para arrecadação tributária com a respectiva participação na renda total
+
+Finalmente, a partir das classes criadas podemos comparar a participação de cada uma na renda total e na arrecadação de cada imposto individualmente e de cada um dos impostos aqui explorados.
+
+```{r, results='markup'}
+tabela_participacao <- pof_impostos_srvyr_design %>% 
+  group_by(classes_renda) %>% 
+  summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
+            despesa_ipva_total = survey_total(gasto_veiculos_anualizado,na.rm= T),
+            despesa_icms_total = survey_total(gasto_icms,na.rm = T),
+            despesa_total = survey_total(gasto_impostos,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(part_renda = scales::percent(renda_total/sum(renda_total)),
+         part_ipva = scales::percent(despesa_ipva_total/sum(despesa_ipva_total)),
+         part_icms = scales::percent(despesa_icms_total/sum(despesa_icms_total)),
+         part_impostos = scales::percent(despesa_total/sum(despesa_total)))
+
+tabela_participacao <- tabela_participacao %>% select(-c(renda_total,
+                                                         despesa_ipva_total,
+                                                         despesa_icms_total,
+                                                         despesa_total,
+                                                         renda_total_se,
+                                                         despesa_ipva_total_se,
+                                                         despesa_icms_total_se,
+                                                         despesa_total_se))
+
+kbl(tabela_participacao,col.names = c("Salários mínimos",
+                                      "Renda total",
+                                      "Gasto com IPVA",
+                                      "Gasto com ICMS",
+                                      "Gasto com impostos"),
+      align = c("lcccc"),
+      booktabs = T,
+      caption = "Participação das classes no gasto com impostos",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 4))
+
+
+
+rm(tabela_participacao)
+```
+
+## Comparando o gini nos estágios de renda
+
+### Tratando a base de moradores
+
+Aqui são seguidos os mesmo passos de tratamente da base das Famílias utilizada nos passos anteriores, criando uma base que leve em conta o design da amostra para os cálculos.
+
+```{r}
+
+moradores <- readRDS("./Dados/Leitura Microdados POF/MORADOR.rds")
+
+comparação_gini_mg <- moradores %>% select(UF,ESTRATO_POF,TIPO_SITUACAO_REG,COD_UPA,NUM_DOM,NUM_UC,V0306,V0430,V0404,V0405,INSTRUCAO,ANOS_ESTUDO,PESO_FINAL) %>% 
+ mutate(FAMILIA = paste(COD_UPA,NUM_DOM,NUM_UC),
+        V0404  = ifelse(V0404 == 1, "Homem",ifelse(V0404 == 2,"Mulher","")),
+        V0405 = case_when(V0405 == 1 ~ "Branca",
+                          V0405 %in% c(2,4) ~ "Negra",
+                          V0405 == 3 ~ "Amarela",
+                          V0405 == 5 ~ "Indígena",
+                          V0405 == 9 ~ "Não declarado",
+                          TRUE ~ "Vazio"),
+        INSTRUCAO_short = case_when(INSTRUCAO == 1 ~ "Sem intrução",
+                                    INSTRUCAO <= 4 ~ "Até Fundamental completo",
+                                    INSTRUCAO <= 6 ~ "Até Médio completo",
+                                    INSTRUCAO == 7 ~ "Ensino Superior completo",
+                                    TRUE ~ "Não considerado"),
+        INSTRUCAO_short = factor(INSTRUCAO_short, levels = c("Sem intrução",
+                                                              "Até Fundamental completo",
+                                                              "Até Médio completo",
+                                                              "Ensino Superior completo")),
+         sexo_raca = paste(V0404,V0405)) %>% 
+ left_join(pof_impostos_srvyr_design$variables, by = "FAMILIA") %>% 
+  filter(UF == 31) %>% 
+  ungroup()
+
+comparação_gini_mg <- comparação_gini_mg %>% mutate(RENDA_ANUAL_PC = RENDA_TOTAL_ANUAL/n_moradores,
+                              ICMS_ANUAL_PC = gasto_icms/n_moradores,
+                              IPVA_ANUAL_pc = gasto_veiculos_anualizado/n_moradores,
+                              IMPOSTOS_ANUAL_PC = gasto_impostos/n_moradores)
+
+
+pre_stratified_design_mg <- 
+    svydesign(
+        id = ~UPA , 
+        strata = ~ESTRATO ,
+        weights = ~peso ,
+        data = comparação_gini_mg ,
+        nest = TRUE
+    )
+
+
+population_totals <- 
+    data.frame(
+        pos_estrato = unique( comparação_gini_mg$pos_estrato ) , 
+        Freq = unique( comparação_gini_mg$TOTAL_PESSOAS_REFERENCIA ) 
+    )
+
+pof_design_moradores <-
+    postStratify(
+        pre_stratified_design_mg , 
+        ~ pos_estrato, 
+        population_totals
+    )
+
+saveRDS(pof_design_moradores,"POF_mg_design_moradores_icms_ipva.rds")
+rm(comparação_gini,pof_impostos_srvyr_design,population_totals,moradores,pre_stratified_design)
+
+```
+
+### Calculando o gini e da curva de lorenz para diferentes etapas
+
+Procedemos então com o cálculo do gini nas três etapas de renda calculadas anteriormente - A renda total, a renda pós gasto com IPVA e a renda pós gasto com ICMS.
+
+```{r}
+library(convey)
+library(webuse)
+
+pof_design_moradores_prep <- convey_prep(pof_design_moradores)
+
+gini_renda_total <- coef( svygini( ~ RENDA_TOTAL_ANUAL, pof_design_moradores_prep ) ) * 100
+
+gini_pos_ipva <- coef( svygini( ~ renda_pos_ipva, pof_design_moradores_prep )) * 100
+
+gini_pos_icms <- coef( svygini( ~ renda_pos_icms, pof_design_moradores_prep )) *100
+
+tabela_gini <- data.frame(etapa_renda = c("Renda Total","Renda pós IPVA","Renda pós ICMS"),
+                          gini = c(gini_renda_total,gini_pos_ipva,gini_pos_icms))
+
+kable(tabela_gini, digits = 2,col.names = c("Estágio da Renda",
+                                            "Índice de Gini"),
+      align = c("cc"))
+
+svylorenz( ~RENDA_TOTAL_ANUAL, pof_design_moradores_prep, quantiles = seq( 0, 1, .05 ), na.rm = TRUE )
+
+svylorenz( ~renda_pos_ipva, pof_design_moradores_prep, quantiles = seq( 0, 1, .05 ), na.rm = TRUE )
+png()
+svylorenz( ~renda_pos_icms, pof_design_moradores_prep, quantiles = seq( 0, 1, .05 ), na.rm = TRUE )
+```
+
+### 9. Cálculo das curvas de concentração dos impostos e do coeficiente de concentração
+
+Refêrencia: https://econpolrg.files.wordpress.com/2013/05/medeiros_2012_medidas_de_desigualdade_e_pobreza.pdf
+
+"A posição e a inclinação de uma Curva de Concentração em relação à linha de igualdade indicam a progressividade da distribuição. Por esse motivo, essa curva é muito usada para a análise da distribuição de transferências, bens e serviços públicos segundo grupos de renda ou ainda para o estudo da distribuição dos componentes da renda total das famílias." (Medeiros, 2012)
+
+"As Curvas de Concentração são úteis para fazer julgamentos de valor, avaliações da progressividade ou regressividade da transferência de bens, serviços, tributos ou rendas"(...)"quando se trata de tributos (...) a concentração  nos mais ricos que faz uma distribuição ser progressiva."
+
+"A noção de concentração usada nas Curvas de Concentração diz respeito à distribuição de uma variável em uma população classificada segundo uma outra variável."(Medeiros, 2012)
+
+## Índice de Lerman-Yitzhaki
+
+```{r}
+library(IC2)
+library("rineq")
+
+con_index_icms <- ci(pof_design_moradores$variables$gasto_icms, pof_design_moradores$variables$renda_pos_icms,wt=pof_design_moradores$variables$peso, type = c("CI"))
+
+con_index_ipva <- ci(pof_design_moradores$variables$gasto_veiculos_anualizado, pof_design_moradores$variables$renda_pos_ipva,wt=pof_design_moradores$variables$peso, type = c("CI"))
+
+lerYi_icms <- con_index_icms$concentration_index - gini_pos_icms[1]/100
+lerYi_ipva <- con_index_ipva$concentration_index - gini_pos_ipva[1]/100
+
+print(lerYi_icms)
+print(lerYi_ipva)
+```
+
+## Despesas com impostos nos diferentes grupos sociais
+
+Por raça
+
+```{r}
+tabela_raca_gasto <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(V0405) %>%
+  summarise(renda_total_media = survey_mean(RENDA_TOTAL_ANUAL,w = peso,na.rm = T),
+            despesa_ipva_media = survey_mean(gasto_veiculos_anualizado,w = peso,na.rm = T),
+            despesa_icms_media = survey_mean(gasto_icms,w = peso, na.rm = T),
+            despesa_total_media = survey_mean(gasto_impostos,w = peso,na.rm = T)) %>% 
+  mutate(gastoemipva =scales::percent(despesa_ipva_media/renda_total_media),
+         gastoemicms = scales::percent(despesa_icms_media/renda_total_media),
+         gastoemimpostos = scales::percent(despesa_total_media/renda_total_media))
+
+tabela_raca_gasto <- tabela_raca_gasto %>% select(-c(renda_total_media_se,
+                                                         despesa_ipva_media_se,
+                                                         despesa_icms_media_se,
+                                                         despesa_total_media_se)) %>% 
+  filter(V0405 != "Não declarado")
+
+kbl(tabela_raca_gasto,col.names = c("Raça",
+                                      "Renda total média",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais"),
+      align = c("lcccccc"),
+      booktabs = T,
+      caption = "Carga tributária entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 2, "Despesa média" = 3, "% da Renda total média"))
+
+
+```
+
+Por sexo
+
+```{r}
+
+tabela_sexo_gasto <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(V0404) %>%
+  summarise(renda_total_media = survey_mean(RENDA_TOTAL_ANUAL,w = peso,na.rm = T),
+            despesa_ipva_media = survey_mean(gasto_veiculos_anualizado,w = peso,na.rm = T),
+            despesa_icms_media = survey_mean(gasto_icms,w = peso, na.rm = T),
+            despesa_total_media = survey_mean(gasto_impostos,w = peso,na.rm = T)) %>% 
+  mutate(gastoemipva =scales::percent(despesa_ipva_media/renda_total_media),
+         gastoemicms = scales::percent(despesa_icms_media/renda_total_media),
+         gastoemimpostos = scales::percent(despesa_total_media/renda_total_media))
+
+tabela_sexo_gasto <- tabela_sexo_gasto %>% select(-c(renda_total_media_se,
+                                                         despesa_ipva_media_se,
+                                                         despesa_icms_media_se,
+                                                         despesa_total_media_se))
+
+kbl(tabela_sexo_gasto,col.names = c("Sexo",
+                                      "Renda total média",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais"),
+      align = c("lcccccc"),
+      booktabs = T,
+      caption = "Carga tributária entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 2, "Despesa média" = 3, "% da Renda total média"))
+
+```
+
+
+por escolaridade
+
+```{r}
+tabela_escola_gasto <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(INSTRUCAO_short) %>%
+  summarise(renda_total_media = survey_mean(RENDA_TOTAL_ANUAL,w = peso,na.rm = T),
+            despesa_ipva_media = survey_mean(gasto_veiculos_anualizado,w = peso,na.rm = T),
+            despesa_icms_media = survey_mean(gasto_icms,w = peso, na.rm = T),
+            despesa_total_media = survey_mean(gasto_impostos,w = peso,na.rm = T)) %>% 
+  mutate(gastoemipva =scales::percent(despesa_ipva_media/renda_total_media),
+         gastoemicms = scales::percent(despesa_icms_media/renda_total_media),
+         gastoemimpostos = scales::percent(despesa_total_media/renda_total_media))
+
+tabela_escola_gasto <- tabela_escola_gasto %>% select(-c(renda_total_media_se,
+                                                         despesa_ipva_media_se,
+                                                         despesa_icms_media_se,
+                                                         despesa_total_media_se)) %>% 
+  filter(INSTRUCAO_short != "Não considerado")
+
+kbl(tabela_escola_gasto,col.names = c("Escolaridade",
+                                      "Renda total média",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais"),
+      align = c("lcccccc"),
+      booktabs = T,
+      caption = "Carga tributária entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 2, "Despesa média" = 3, "% da Renda total média"))
+
+```
+
+por sexo e raça
+
+```{r}
+tabela_sexo_raca_gasto <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(sexo_raca) %>%
+  summarise(renda_total_media = survey_mean(RENDA_TOTAL_ANUAL,w = peso,na.rm = T),
+            despesa_ipva_media = survey_mean(gasto_veiculos_anualizado,w = peso,na.rm = T),
+            despesa_icms_media = survey_mean(gasto_icms,w = peso, na.rm = T),
+            despesa_total_media = survey_mean(gasto_impostos,w = peso,na.rm = T)) %>% 
+  mutate(gastoemipva =scales::percent(despesa_ipva_media/renda_total_media),
+         gastoemicms = scales::percent(despesa_icms_media/renda_total_media),
+         gastoemimpostos = scales::percent(despesa_total_media/renda_total_media))
+
+tabela_sexo_raca_gasto <- tabela_sexo_raca_gasto %>% select(-c(renda_total_media_se,
+                                                         despesa_ipva_media_se,
+                                                         despesa_icms_media_se,
+                                                         despesa_total_media_se)) %>% 
+  filter(!grepl("Não declarado",sexo_raca))
+
+kbl(tabela_sexo_raca_gasto,col.names = c("Sexo e raça",
+                                      "Renda total média",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais",
+                                      "IPVA",
+                                      "ICMS",
+                                      "Impostos estaduais"),
+      align = c("lcccccc"),
+      booktabs = T,
+      caption = "Carga tributária entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 2, "Despesa média" = 3, "% da Renda total média"))
+
+```
+
+
+## Participação no gasto tributário
+
+Por raça
+
+```{r}
+tabela_raca_participacao <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(V0405) %>% 
+  summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
+            despesa_ipva_total = survey_total(gasto_veiculos_anualizado,na.rm= T),
+            despesa_icms_total = survey_total(gasto_icms,na.rm = T),
+            despesa_total = survey_total(gasto_impostos,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(part_renda = scales::percent(renda_total/sum(renda_total)),
+         part_ipva = scales::percent(despesa_ipva_total/sum(despesa_ipva_total)),
+         part_icms = scales::percent(despesa_icms_total/sum(despesa_icms_total)),
+         part_impostos = scales::percent(despesa_total/sum(despesa_total)))
+
+tabela_raca_participacao <- tabela_raca_participacao %>% select(-c(renda_total,
+                                                         despesa_ipva_total,
+                                                         despesa_icms_total,
+                                                         despesa_total,
+                                                         renda_total_se,
+                                                         despesa_ipva_total_se,
+                                                         despesa_icms_total_se,
+                                                         despesa_total_se))%>% 
+  filter(V0405 != "Não declarado")
+
+kbl(tabela_raca_participacao,col.names = c("Raça",
+                                      "Renda total",
+                                      "Gasto com IPVA",
+                                      "Gasto com ICMS",
+                                      "Gasto com impostos"),
+      align = c("lcccc"),
+      booktabs = T,
+      caption = "Participação no gasto com impostos entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 4))
+
+```
+
+por sexo
+
+```{r}
+
+tabela_sexo_participacao <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(V0404) %>% 
+  summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
+            despesa_ipva_total = survey_total(gasto_veiculos_anualizado,na.rm= T),
+            despesa_icms_total = survey_total(gasto_icms,na.rm = T),
+            despesa_total = survey_total(gasto_impostos,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(part_renda = scales::percent(renda_total/sum(renda_total)),
+         part_ipva = scales::percent(despesa_ipva_total/sum(despesa_ipva_total)),
+         part_icms = scales::percent(despesa_icms_total/sum(despesa_icms_total)),
+         part_impostos = scales::percent(despesa_total/sum(despesa_total)))
+
+tabela_sexo_participacao <- tabela_sexo_participacao %>% select(-c(renda_total,
+                                                         despesa_ipva_total,
+                                                         despesa_icms_total,
+                                                         despesa_total,
+                                                         renda_total_se,
+                                                         despesa_ipva_total_se,
+                                                         despesa_icms_total_se,
+                                                         despesa_total_se))
+
+kbl(tabela_sexo_participacao,col.names = c("Sexo",
+                                      "Renda total",
+                                      "Gasto com IPVA",
+                                      "Gasto com ICMS",
+                                      "Gasto com impostos"),
+      align = c("lcccc"),
+      booktabs = T,
+      caption = "Participação no gasto com impostos entre os sexos",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 4))
+
+
+```
+
+por escolaridade
+
+```{r}
+
+tabela_escola_participacao <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(INSTRUCAO_short) %>% 
+  summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
+            despesa_ipva_total = survey_total(gasto_veiculos_anualizado,na.rm= T),
+            despesa_icms_total = survey_total(gasto_icms,na.rm = T),
+            despesa_total = survey_total(gasto_impostos,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(part_renda = scales::percent(renda_total/sum(renda_total)),
+         part_ipva = scales::percent(despesa_ipva_total/sum(despesa_ipva_total)),
+         part_icms = scales::percent(despesa_icms_total/sum(despesa_icms_total)),
+         part_impostos = scales::percent(despesa_total/sum(despesa_total)))
+
+tabela_escola_participacao <- tabela_escola_participacao %>% select(-c(renda_total,
+                                                         despesa_ipva_total,
+                                                         despesa_icms_total,
+                                                         despesa_total,
+                                                         renda_total_se,
+                                                         despesa_ipva_total_se,
+                                                         despesa_icms_total_se,
+                                                         despesa_total_se)) %>% 
+  filter(INSTRUCAO_short != "Não considerado")
+
+kbl(tabela_escola_participacao,col.names = c("Escolaridade",
+                                      "Renda total",
+                                      "Gasto com IPVA",
+                                      "Gasto com ICMS",
+                                      "Gasto com impostos"),
+      align = c("lcccc"),
+      booktabs = T,
+      caption = "Participação no gasto com impostos entre diferentes escolaridades",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 4))
+
+
+```
+
+Por sexo e raça
+
+```{r}
+tabela_sexo_raca_participacao <- pof_design_moradores %>% 
+  as_survey() %>% 
+  group_by(sexo_raca) %>% 
+  summarise(renda_total = survey_total(RENDA_TOTAL_ANUAL,na.rm = T),
+            despesa_ipva_total = survey_total(gasto_veiculos_anualizado,na.rm= T),
+            despesa_icms_total = survey_total(gasto_icms,na.rm = T),
+            despesa_total = survey_total(gasto_impostos,na.rm = T)) %>% 
+  ungroup() %>% 
+  mutate(part_renda = scales::percent(renda_total/sum(renda_total)),
+         part_ipva = scales::percent(despesa_ipva_total/sum(despesa_ipva_total)),
+         part_icms = scales::percent(despesa_icms_total/sum(despesa_icms_total)),
+         part_impostos = scales::percent(despesa_total/sum(despesa_total)))
+
+tabela_sexo_raca_participacao <- tabela_sexo_raca_participacao %>% select(-c(renda_total,
+                                                         despesa_ipva_total,
+                                                         despesa_icms_total,
+                                                         despesa_total,
+                                                         renda_total_se,
+                                                         despesa_ipva_total_se,
+                                                         despesa_icms_total_se,
+                                                         despesa_total_se)) %>% 
+  filter(!grepl("Não declarado",sexo_raca))
+
+kbl(tabela_sexo_raca_participacao,col.names = c("Sexo e raça",
+                                      "Renda total",
+                                      "Gasto com IPVA",
+                                      "Gasto com ICMS",
+                                      "Gasto com impostos"),
+      align = c("lcccc"),
+      booktabs = T,
+      caption = "Participação no gasto com impostos entre as raças",
+      format.args = list(big.mark = " ",scientific = FALSE)) %>% 
+      kable_styling(font_size = 7,
+                latex_options = c("striped", "scale_down"),
+                full_width = T) %>% 
+      add_header_above(c(" " = 1, "% do total" = 4))
+
+```
+
+
